@@ -23,6 +23,42 @@ class GraphSpec extends AnyWordSpecLike with Matchers with EitherValues{
 
     }
 
+    "stops execution at end node" in {
+      val graph =
+        Graph[Int]()
+          .addNode(Node("a", _ + 1))
+          .addNode(Node("b", _ * 2))
+          .addNode(Node("c", _ - 100))
+          .setStart("a")
+          .setEnd("b")
+          .addEdge("a", "b")
+          .addEdge("b", "c")
+
+      val result =
+        graph
+          .validate()
+          .getOrElse(fail("validation failed"))
+          .run(10)
+
+      result shouldBe 22
+    }
+
+    "returns result when start and end are same node" in {
+      val graph =
+        Graph[Int]()
+          .addNode(Node("increment", _ + 1))
+          .setStart("increment")
+          .setEnd("increment")
+
+      val result =
+        graph
+          .validate()
+          .getOrElse(fail("validation failed"))
+          .run(10)
+
+      result shouldBe 11
+    }
+
   }
 
 
@@ -36,7 +72,7 @@ class GraphSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .setEnd("double")
           .addEdge("increment", "double")
 
-      graph.validate() shouldBe Right(graph)
+      graph.validate().isRight shouldBe true
     }
 
     "fails validation when start node missing" in {
