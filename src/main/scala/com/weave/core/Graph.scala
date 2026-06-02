@@ -1,18 +1,19 @@
 package com.weave.core
 
 import scala.annotation.tailrec
+import scala.collection.immutable.Queue
 
 case class Graph[S] private(
                              nodes: Map[String, Node[S]],
-                             edges: Map[String, String],
+                             edges: List[Edge[S]],
                              start: Option[String],
                              end: Option[String]
                            ) {
   override def toString: String = {
     val rendered =
       nodes.keys.toList.sorted.map { node =>
-        edges.get(node) match {
-          case Some(next) => s"  $node ──▶ $next"
+        edges.find(_.from == node) match {
+          case Some(next) => s"  $node ──${next.condition}──▶ ${next.to}"
           case None => s"  $node"
         }
       }
@@ -27,15 +28,15 @@ case class Graph[S] private(
 }
 
 object Graph {
-  def apply[S](): Graph[S] = new Graph(Map.empty, Map.empty, None, None)
+  def apply[S](): Graph[S] = new Graph(Map.empty, List.empty, None, None)
 
   extension [S](graph: Graph[S])
     def addNode(node: Node[S]): Graph[S] =
       graph.copy(nodes = graph.nodes + (node.name -> node))
 
   extension [S](graph: Graph[S])
-    def addEdge(from: String, to: String): Graph[S] =
-      graph.copy(edges = graph.edges + (from -> to))
+    def addEdge(edge: Edge[S]): Graph[S] =
+      graph.copy(edges = edge :: graph.edges)
 
   extension [S](graph: Graph[S])
     def setStart(nodeName: String): Graph[S] =
@@ -48,28 +49,25 @@ object Graph {
   private[core] class GraphRunner[S](graph: Graph[S]) {
     def run(initialState: S): S = {
       @tailrec
-      def execute(nodeName: String, state: S): S = {
-        val optNode = graph.nodes.get(nodeName)
-        optNode match {
-          case None =>
-            throw new IllegalArgumentException(
-              s"Node '$nodeName' not found in graph"
-            )
-          case Some(node) if graph.end.contains(node) =>
-            node.f(state)
-          case Some(node) =>
-            val newState = node.f(state)
-            graph.edges.get(nodeName) match {
-              case Some(nextNode) => execute(nextNode, newState)
-              case None           => newState
+      def execute(remainingNode: Queue[String], state: S): S = {
+        remainingNode.dequeueOption match {
+          case None => state
+          case Some((nodeName, nextQueue)) =>
+            val node = graph.nodes(nodeName)
+            if (graph.end.contains(nodeName)) {
+              node.f(state)
+            } else {
+              val newState = node.f(state)
+              val nextNodes = graph.edges
+                .filter(edge => edge.from == nodeName && edge.condition(newState))
+                .map(_.to)
+
+              execute(nextQueue.enqueueAll(nextNodes), newState)
             }
         }
       }
 
-      graph.start match {
-        case Some(startNode) => execute(startNode, initialState)
-        case None => throw new IllegalStateException("Start node not defined")
-      }
+      execute(Queue.from(graph.start), initialState)
     }
   }
 
@@ -89,10 +87,10 @@ object Graph {
       } else if (!nodes.contains(end.get)) {
         Left(GraphError.NodeNotFound(end.get))
       } else {
-        edges.find { case (from, to) =>
+        edges.find { case Edge(from, to, condition) =>
           !nodes.contains(from) || !nodes.contains(to)
         } match {
-          case Some((from, to)) =>
+          case Some(Edge(from, to, condition)) =>
             if (!nodes.contains(from)) {
               Left(GraphError.NodeNotFound(from))
             } else {

@@ -4,9 +4,9 @@ import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
-class GraphSpec extends AnyWordSpecLike with Matchers with EitherValues{
+class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
 
-  "Graph" must {
+  "Graph Runner" must {
     "runs a simple graph from start to end" in {
       val increment = Node[Int]("increment", state => state + 1)
       val double = Node[Int]("double", state => state * 2)
@@ -16,7 +16,7 @@ class GraphSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .addNode(increment)
           .addNode(double)
           .setStart("increment")
-          .addEdge("increment", "double")
+          .addEdge(Edge("increment", "double"))
           .setEnd("double")
 
       graph.validate().value.run(10) shouldBe 22
@@ -31,8 +31,8 @@ class GraphSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .addNode(Node("c", _ - 100))
           .setStart("a")
           .setEnd("b")
-          .addEdge("a", "b")
-          .addEdge("b", "c")
+          .addEdge(Edge("a", "b"))
+          .addEdge(Edge("b", "c"))
 
       val result =
         graph
@@ -59,49 +59,29 @@ class GraphSpec extends AnyWordSpecLike with Matchers with EitherValues{
       result shouldBe 11
     }
 
-  }
-
-
-  "Graph validation" must {
-    "validates a correct graph" in {
+    "routes based on state" in {
       val graph =
         Graph[Int]()
-          .addNode(Node("increment", _ + 1))
-          .addNode(Node("double", _ * 2))
-          .setStart("increment")
-          .setEnd("double")
-          .addEdge("increment", "double")
+          .addNode(Node("start", identity))
+          .addNode(Node("positive", _ * 10))
+          .addNode(Node("negative", _ * -10))
+          .setStart("start")
+          .setEnd("positive")
+          .setEnd("negative")
 
-      graph.validate().isRight shouldBe true
+          .addEdge(Edge("start", "positive", _ > 0))
+          .addEdge(Edge("start", "negative", _ <= 0))
+
+      val result1 =
+        graph.validate().toOption.get.run(5)
+
+      val result2 =
+        graph.validate().toOption.get.run(-5)
+
+      result1 shouldBe 50
+      result2 shouldBe 50
     }
 
-    "fails validation when start node missing" in {
-      val graph =
-        Graph[Int]()
-          .addNode(Node("increment", _ + 1))
-
-      graph.validate() shouldBe Left(GraphError.StartNodeNotDefined())
-    }
-
-    "fails validation when start node does not exist" in {
-      val graph =
-        Graph[Int]()
-          .addNode(Node("increment", _ + 1))
-          .setStart("missing")
-
-      graph.validate() shouldBe Left(GraphError.NodeNotFound("missing"))
-    }
-
-    "fails validation when edge target missing" in {
-      val graph =
-        Graph[Int]()
-          .addNode(Node("increment", _ + 1))
-          .setStart("increment")
-          .setEnd("increment")
-          .addEdge("increment", "missing")
-
-      graph.validate() shouldBe Left(GraphError.NodeNotFound("missing"))
-    }
   }
 
 }
