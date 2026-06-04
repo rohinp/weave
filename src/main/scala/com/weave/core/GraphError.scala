@@ -20,4 +20,8 @@ object GraphError {
   case class EndNodeNotDefined() extends GraphError {
     override def message: String = "End node not defined"
   }
+  
+  case class RuntimeError(nodeName: String, cause: Throwable) extends GraphError {
+    override def message: String = s"Runtime error in node '$nodeName': ${cause.getMessage}"
+  }
 }

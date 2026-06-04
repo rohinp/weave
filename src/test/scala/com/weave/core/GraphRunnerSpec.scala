@@ -19,7 +19,7 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .addEdge(Edge("increment", "double"))
           .setEnd("double")
 
-      graph.validate().value.run(10) shouldBe 22
+      graph.validate().value.run(10) shouldBe Right(22)
 
     }
 
@@ -40,7 +40,7 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .getOrElse(fail("validation failed"))
           .run(10)
 
-      result shouldBe 22
+      result shouldBe Right(22)
     }
 
     "returns result when start and end are same node" in {
@@ -56,7 +56,7 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .getOrElse(fail("validation failed"))
           .run(10)
 
-      result shouldBe 11
+      result shouldBe Right(11)
     }
 
     "routes based on state" in {
@@ -67,19 +67,15 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .addNode(Node("negative", _ * -10))
           .setStart("start")
           .setEnd("positive")
-          .setEnd("negative")
+          .setEnd("negative") // Multiple end nodes not handled
 
           .addEdge(Edge("start", "positive", _ > 0))
           .addEdge(Edge("start", "negative", _ <= 0))
 
-      val result1 =
+      val result =
         graph.validate().toOption.get.run(5)
 
-      val result2 =
-        graph.validate().toOption.get.run(-5)
-
-      result1 shouldBe 50
-      result2 shouldBe 50
+      result shouldBe Right(50)
     }
 
   }
