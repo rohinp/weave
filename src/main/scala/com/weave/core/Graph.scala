@@ -70,7 +70,7 @@ object Graph {
       }
 
       (node.retryPolicy match {
-        case RetryPolicy.Never => loop(0, Try(node.f(state))) //not handled events in this case
+        case RetryPolicy.Never => loop(1, Try(node.f(state)))
         case RetryPolicy.FixedAttempts(maxAttempts) => loop(maxAttempts, Try(node.f(state)))
       }).fold(
         ex => {
