@@ -1,7 +1,7 @@
 package com.weave.core
 
 import scala.annotation.tailrec
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 import scala.util.chaining.*
 
 case class Graph[S] private (
@@ -54,14 +54,30 @@ object Graph {
         state: S,
         onEvent: GraphEvent => Unit
     ): Either[GraphError, S] = {
-      onEvent(GraphEvent.NodeStarted(node.name))
-      Try(node.f(state)).fold(
+      @tailrec
+      def loop(numberOfRetries:Int, acc: =>Try[S]): Try[S] = {
+        if(numberOfRetries == 0 ) acc else {
+          onEvent(GraphEvent.NodeStarted(node.name))
+          acc match {
+            case Failure(ex) =>
+              onEvent(GraphEvent.NodeFailed(node.name, ex))
+              loop(numberOfRetries - 1, acc)
+            case Success(value) =>
+              onEvent(GraphEvent.NodeCompleted(node.name))
+              Try(value)
+          }
+        }
+      }
+
+      (node.retryPolicy match {
+        case RetryPolicy.Never => loop(0, Try(node.f(state))) //not handled events in this case
+        case RetryPolicy.FixedAttempts(maxAttempts) => loop(maxAttempts, Try(node.f(state)))
+      }).fold(
         ex => {
-          onEvent(GraphEvent.NodeFailed(node.name, ex))
           onEvent(GraphEvent.WorkflowFailed(ex))
           Left(GraphError.RuntimeError(node.name, ex))
         },
-        Right(_).tap(_ => onEvent(GraphEvent.NodeCompleted(node.name)))
+        Right(_)
       )
     }
 
@@ -90,7 +106,6 @@ object Graph {
                   )
                   .map(_.to)
                 result <- execute(xs ++ nextNodes, newState)
-                _ = onEvent(GraphEvent.WorkflowCompleted())
               } yield result
 
             }
@@ -98,6 +113,7 @@ object Graph {
       }
 
       execute(List.from(graph.start), initialState)
+        .tap(result => if(result.isRight) onEvent(GraphEvent.WorkflowCompleted()) else ())
     }
   }
 
