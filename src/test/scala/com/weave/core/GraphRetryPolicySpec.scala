@@ -8,7 +8,7 @@ import org.scalatest.wordspec.AnyWordSpecLike
 class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValues {
 
   "Graph Retry policies" must {
-    "doe not retries a failing node" in {
+    "do not retries a failing node" in {
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
       val flakyNode =

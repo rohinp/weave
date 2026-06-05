@@ -4,18 +4,18 @@ import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.util.chaining.*
 
-case class Graph[S] private (
-    nodes: Map[String, Node[S]],
-    edges: List[Edge[S]],
-    start: Option[String],
-    end: Option[String]
-) {
+case class Graph[S] private(
+                             nodes: Map[String, Node[S]],
+                             edges: List[Edge[S]],
+                             start: Option[String],
+                             end: Option[String]
+                           ) {
   override def toString: String = {
     val rendered =
       nodes.keys.toList.sorted.map { node =>
         edges.find(_.from == node) match {
           case Some(next) => s"  $node ──${next.condition}──▶ ${next.to}"
-          case None       => s"  $node"
+          case None => s"  $node"
         }
       }
 
@@ -31,48 +31,74 @@ case class Graph[S] private (
 object Graph {
   def apply[S](): Graph[S] = new Graph(Map.empty, List.empty, None, None)
 
-  extension[S](graph: Graph[S])
+  extension [S](graph: Graph[S])
     def addNode(node: Node[S]): Graph[S] =
       graph.copy(nodes = graph.nodes + (node.name -> node))
 
-  extension[S](graph: Graph[S])
+  extension [S](graph: Graph[S])
     def addEdge(edge: Edge[S]): Graph[S] =
       graph.copy(edges = edge :: graph.edges)
 
-  extension[S](graph: Graph[S])
+  extension [S](graph: Graph[S])
     def setStart(nodeName: String): Graph[S] =
       graph.copy(start = Some(nodeName))
 
-  extension[S](graph: Graph[S])
+  extension [S](graph: Graph[S])
     def setEnd(nodeName: String): Graph[S] =
       graph.copy(end = Some(nodeName))
 
   private[core] class GraphRunner[S](graph: Graph[S]) {
 
-    private def executeNode(
-        node: Node[S],
-        state: S,
-        onEvent: GraphEvent => Unit
-    ): Either[GraphError, S] = {
-      @tailrec
-      def loop(numberOfRetries:Int, acc: =>Try[S]): Try[S] = {
-        if(numberOfRetries == 0 ) acc else {
-          onEvent(GraphEvent.NodeStarted(node.name))
-          acc match {
-            case Failure(ex) =>
-              onEvent(GraphEvent.NodeFailed(node.name, ex))
-              loop(numberOfRetries - 1, acc)
-            case Success(value) =>
-              onEvent(GraphEvent.NodeCompleted(node.name))
-              Try(value)
-          }
-        }
-      }
+    private def attemptExecuteNode(
+                                   node: Node[S],
+                                   state: S,
+                                   onEvent: GraphEvent => Unit
+                                 ): Try[S] = {
+      onEvent(GraphEvent.NodeStarted(node.name))
+      Try(node.f(state)).tap({
+        case Failure(ex) =>
+          onEvent(GraphEvent.NodeFailed(node.name, ex))
+        case Success(value) =>
+          onEvent(GraphEvent.NodeCompleted(node.name))
+      })
+    }
 
-      (node.retryPolicy match {
-        case RetryPolicy.Never => loop(1, Try(node.f(state)))
-        case RetryPolicy.FixedAttempts(maxAttempts) => loop(maxAttempts, Try(node.f(state)))
-      }).fold(
+    @tailrec
+    private def retryExecuteNode(node: Node[S],
+                                 state: S,
+                                 onEvent: GraphEvent => Unit,
+                                 retryPolicy: RetryPolicy,
+                                 previousResult: Try[S]
+                                ): Try[S] = {
+
+      retryPolicy match {
+        case RetryPolicy.Never =>
+          previousResult.tap({
+            case Failure(ex) =>
+              onEvent(GraphEvent.WorkflowFailed(ex))
+            case result => result
+          })
+        case RetryPolicy.FixedAttempts(1) =>
+          previousResult
+        case RetryPolicy.FixedAttempts(maxAttempts) =>
+          val result = attemptExecuteNode(node, state, onEvent)
+          retryExecuteNode(node, state, onEvent, RetryPolicy.FixedAttempts(maxAttempts - 1), result)
+      }
+    }
+
+    private def executeNode(
+                             node: Node[S],
+                             state: S,
+                             onEvent: GraphEvent => Unit
+                           ): Either[GraphError, S] = {
+      attemptExecuteNode(node, state, onEvent)
+        .pipe(previousResult => {
+          node.retryPolicy match {
+            case RetryPolicy.Never => previousResult
+            case policy@RetryPolicy.FixedAttempts(_) =>
+              retryExecuteNode(node, state, onEvent, policy, previousResult)
+          }
+        }).fold(
         ex => {
           onEvent(GraphEvent.WorkflowFailed(ex))
           Left(GraphError.RuntimeError(node.name, ex))
@@ -82,17 +108,17 @@ object Graph {
     }
 
     def run(
-        initialState: S,
-        onEvent: GraphEvent => Unit = _ => ()
-    ): Either[GraphError, S] = {
+             initialState: S,
+             onEvent: GraphEvent => Unit = _ => ()
+           ): Either[GraphError, S] = {
 
       def execute(
-          remainingNode: List[String],
-          state: S
-      ): Either[GraphError, S] = {
+                   remainingNode: List[String],
+                   state: S
+                 ): Either[GraphError, S] = {
         remainingNode match {
           //TODO: execution completion needs a single owner.
-          case List()         => Right(state)
+          case List() => Right(state)
           case nodeName :: xs =>
             val node = graph.nodes(nodeName)
             if (graph.end.contains(nodeName)) {
@@ -113,11 +139,11 @@ object Graph {
       }
 
       execute(List.from(graph.start), initialState)
-        .tap(result => if(result.isRight) onEvent(GraphEvent.WorkflowCompleted()) else ())
+        .tap(result => if (result.isRight) onEvent(GraphEvent.WorkflowCompleted()) else ())
     }
   }
 
-  extension[S](graph: Graph[S])
+  extension [S](graph: Graph[S])
     /*TODO: Check mixin types*/
     def validate(): Either[GraphError, GraphRunner[S]] = {
       import graph.*
