@@ -67,17 +67,10 @@ object Graph {
     private def retryExecuteNode(node: Node[S],
                                  state: S,
                                  onEvent: GraphEvent => Unit,
-                                 retryPolicy: RetryPolicy,
+                                 retryPolicy: RetryPolicy.FixedAttempts,
                                  previousResult: Try[S]
                                 ): Try[S] = {
-
       retryPolicy match {
-        case RetryPolicy.Never =>
-          previousResult.tap({
-            case Failure(ex) =>
-              onEvent(GraphEvent.WorkflowFailed(ex))
-            case result => result
-          })
         case RetryPolicy.FixedAttempts(1) =>
           previousResult
         case RetryPolicy.FixedAttempts(maxAttempts) =>
@@ -112,6 +105,7 @@ object Graph {
              onEvent: GraphEvent => Unit = _ => ()
            ): Either[GraphError, S] = {
 
+      //traversal BFS
       def execute(
                    remainingNode: List[String],
                    state: S
