@@ -4,6 +4,7 @@ import com.weave.core.GraphEvent.*
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
+import TestData.*
 
 class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
 
@@ -11,9 +12,8 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
     "emits execution events" in {
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
-      val graph = Graph[Int]()
-        .addNode(Node("increment", _ + 1))
-        .addNode(Node("double", _ * 2))
+      val graph = testGraph.addNode(createIntNode("increment", _ + 1))
+        .addNode(createIntNode("double", _ * 2))
         .setStart("increment")
         .setEnd("double")
         .addEdge(Edge("increment", "double"))
@@ -21,17 +21,18 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .value
 
       graph.run(
-        initialState = 10,
+        initialState = createIntState(10),
         onEvent = events += _
       )
 
       events.toList shouldBe List(
         NodeStarted("increment"),
         NodeCompleted("increment"),
+        CheckpointCreated("increment", ChatState(List(HumanMessage(10), HumanMessage(11)))),
         NodeStarted("double"),
         NodeCompleted("double"),
-        WorkflowCompleted()
-      )
+        CheckpointCreated("double", ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22)))),
+        WorkflowCompleted("workflow"))
     }
 
     "emits node and workflow failure events" in {
@@ -39,7 +40,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
       val events =
         collection.mutable.ListBuffer.empty[GraphEvent]
 
-      val graph = Graph[Int]()
+      val graph = testGraph
         .addNode(
           Node(
             "explode",
@@ -53,7 +54,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .validate()
         .value
         .run(
-          10,
+          createIntState(10),
           events += _
         )
 
@@ -64,6 +65,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
           RuntimeException("boom")
         ),
         GraphEvent.WorkflowFailed(
+          "workflow",
           RuntimeException("boom")
         )
       ).toString
@@ -74,21 +76,21 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
       val events =
         collection.mutable.ListBuffer.empty[GraphEvent]
 
-      val graph = Graph[Int]()
+      val graph = testGraph
         .addNode(
-          Node(
+          createIntNode(
             "success",
             identity
           )
         )
         .addNode(
-          Node(
+          createIntNode(
             "explode",
             _ => throw RuntimeException("boom")
           )
         )
         .addNode(
-          Node(
+          createIntNode(
             "end",
             identity
           )
@@ -102,22 +104,53 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .validate()
         .value
         .run(
-          10,
+          createIntState(10),
           events += _
         )
 
-      events.toList.toString shouldBe List(
+      events.toList shouldBe List(
         GraphEvent.NodeStarted("success"),
         GraphEvent.NodeCompleted("success"),
+        CheckpointCreated("success", ChatState(List(HumanMessage(10), HumanMessage(10)))),
         GraphEvent.NodeStarted("explode"),
         GraphEvent.NodeFailed(
           "explode",
           RuntimeException("boom")
         ),
         GraphEvent.WorkflowFailed(
+          "workflow",
           RuntimeException("boom")
         )
-      ).toString
+      )
+    }
+
+    "creates checkpoints after successful nodes" in {
+
+      val events =
+        collection.mutable.ListBuffer.empty[GraphEvent]
+
+      val graph =
+        testGraph
+          .addNode(createIntNode("a", _ + 1))
+          .addNode(createIntNode("b", _ * 2))
+          .setStart("a")
+          .setEnd("b")
+          .addEdge(Edge("a", "b"))
+
+      graph
+        .validate()
+        .value
+        .run(
+          createIntState(10),
+          events += _
+        )
+
+      events.collect {
+        case c: CheckpointCreated[_] => c
+      } shouldBe List(
+        CheckpointCreated("a", 11),
+        CheckpointCreated("b", 22)
+      )
     }
 
   }

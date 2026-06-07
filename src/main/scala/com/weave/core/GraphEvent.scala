@@ -1,25 +1,37 @@
 package com.weave.core
 
-sealed trait GraphEvent
+sealed trait GraphEvent {
+  val name: String
+  override def equals(obj: Any): Boolean = obj match {
+    case event: GraphEvent => this.name == event.name
+    case _ => false
+  }
+}
 
 object GraphEvent {
 
   case class NodeStarted(
-      nodeName: String
-  ) extends GraphEvent
+                          name: String
+                        ) extends GraphEvent
 
   case class NodeCompleted(
-      nodeName: String
-  ) extends GraphEvent
+                            name: String
+                          ) extends GraphEvent
 
-  case class WorkflowCompleted() extends GraphEvent
+  case class WorkflowCompleted(name: String) extends GraphEvent
 
   case class NodeFailed(
-      nodeName: String,
-      cause: Throwable
-  ) extends GraphEvent
+                         name: String,
+                         cause: Throwable
+                       ) extends GraphEvent
 
   case class WorkflowFailed(
-      cause: Throwable
-  ) extends GraphEvent
+                             name: String,
+                             cause: Throwable
+                           ) extends GraphEvent
+
+  case class CheckpointCreated[S](
+                                   name: String,
+                                   state: S
+                                 ) extends GraphEvent
 }

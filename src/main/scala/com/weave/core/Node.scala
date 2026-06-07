@@ -1,7 +1,7 @@
 package com.weave.core
 
-final case class Node[A](
-                          name: String,
-                          f: A => A,
-                          retryPolicy:RetryPolicy = RetryPolicy.Never
-                        )
+final case class Node[S, U](
+                       name: String,
+                       f: S => U,
+                       retryPolicy: RetryPolicy = RetryPolicy.Never
+                     )

@@ -4,6 +4,7 @@ import com.weave.core.GraphEvent.*
 import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
+import TestData.*
 
 class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValues {
 
@@ -12,14 +13,14 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
       val flakyNode =
-        Node[Int](
+        createIntNode(
           "flaky",
           state => {
               throw RuntimeException("boom")
           }
         )
         
-      val graph = Graph[Int]()
+      val graph = testGraph
         .addNode(flakyNode)
         .setStart("flaky")
         .setEnd("flaky")
@@ -27,7 +28,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .value
 
       graph.run(
-        initialState = 10,
+        initialState = createIntState(10),
         onEvent = events += _
       )
 
@@ -37,7 +38,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
           "flaky",
           RuntimeException("boom")
         ),
-        WorkflowFailed(RuntimeException("boom"))
+        WorkflowFailed("workflow",RuntimeException("boom"))
       ).toString
     }
     "retries a failing node" in {
@@ -45,7 +46,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
       val flakyNode =
-        Node[Int](
+        createIntNode(
           "flaky",
           state => {
             attempts += 1
@@ -58,7 +59,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
           RetryPolicy.FixedAttempts(3)
         )
 
-      val graph = Graph[Int]()
+      val graph = testGraph
         .addNode(flakyNode)
         .setStart("flaky")
         .setEnd("flaky")
@@ -66,11 +67,11 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .value
 
       graph.run(
-        initialState = 10,
+        initialState = createIntState(10),
         onEvent = events += _
       )
 
-      events.toList.toString shouldBe List(
+      events.toList shouldBe List(
         NodeStarted("flaky"),
         GraphEvent.NodeFailed(
           "flaky",
@@ -83,8 +84,52 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         ),
         NodeStarted("flaky"),
         NodeCompleted("flaky"),
-        WorkflowCompleted()
-      ).toString
+        CheckpointCreated("flaky", ChatState(List(HumanMessage(10), HumanMessage(11)))),
+        WorkflowCompleted("workflow")
+      )
+    }
+
+    "do not retry once succeed" in {
+      var attempts = 0
+      val events = collection.mutable.ListBuffer.empty[GraphEvent]
+
+      val flakyNode =
+        createIntNode(
+          "flaky",
+          state => {
+            attempts += 1
+
+            if (attempts < 2)
+              throw RuntimeException("boom")
+
+            state + 1
+          },
+          RetryPolicy.FixedAttempts(4)
+        )
+
+      val graph = testGraph
+        .addNode(flakyNode)
+        .setStart("flaky")
+        .setEnd("flaky")
+        .validate()
+        .value
+
+      graph.run(
+        initialState = createIntState(10),
+        onEvent = events += _
+      )
+
+      events.toList shouldBe List(
+        NodeStarted("flaky"),
+        GraphEvent.NodeFailed(
+          "flaky",
+          RuntimeException("boom")
+        ),
+        NodeStarted("flaky"),
+        NodeCompleted("flaky"),
+        CheckpointCreated("flaky", createIntState(11)),
+        WorkflowCompleted("workflow")
+      )
     }
 
   }
