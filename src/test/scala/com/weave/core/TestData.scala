@@ -15,29 +15,39 @@ object TestData {
 
   case class AppendMessage[M](message: M) extends ChatUpdate[M]
 
-  val reducer: Reducer[ChatState[Int], ChatUpdate[Int]] = {
-    (state: ChatState[Int], update: ChatUpdate[Int]) =>
-      update match {
-        case AppendMessage(message) =>
-          state.copy(messages = state.messages :+ HumanMessage(message))
-      }
-  }
-  val testGraph: Graph[ChatState[Int], ChatUpdate[Int]] =
-    Graph[ChatState[Int], ChatUpdate[Int]](reducer)
+  def reducer[T]: Reducer[ChatState[T], ChatUpdate[T]] =
+    new Reducer[ChatState[T], ChatUpdate[T]] {
+      override def reduce(
+                           state: ChatState[T],
+                           update: ChatUpdate[T]
+                         ): ChatState[T] =
+        update match {
+          case AppendMessage(message) =>
+            state.copy(messages = state.messages :+ HumanMessage(message))
+        }
 
-  def convertToStateFunc(f: Int => Int): ChatState[Int] => ChatUpdate[Int] = state => state.messages.last match {
+      override def merge(left: ChatState[T], right: ChatState[T]): ChatState[T] = {
+        println(s"Merging states: left=${left.messages}, right=${right.messages}")
+        ChatState(left.messages ++ right.messages)
+      }
+    }
+
+  def testGraph[T]: Graph[ChatState[T], ChatUpdate[T]] =
+    Graph[ChatState[T], ChatUpdate[T]](reducer)
+
+  def convertToStateFunc[T](f: T => T): ChatState[T] => ChatUpdate[T] = state => state.messages.last match {
     case HumanMessage(text) => AppendMessage(f(text))
     case AIMessage(text) => AppendMessage(f(text))
   }
 
-  def createIntNode(name: String, f: Int => Int, retryPolicy: RetryPolicy = RetryPolicy.Never): Node[ChatState[Int], ChatUpdate[Int]] = {
-    Node[ChatState[Int], ChatUpdate[Int]](name, convertToStateFunc(f), retryPolicy)
+  def createNode[T](name: String, f: T => T, retryPolicy: RetryPolicy = RetryPolicy.Never): Node[ChatState[T], ChatUpdate[T]] = {
+    Node[ChatState[T], ChatUpdate[T]](name, convertToStateFunc(f), retryPolicy)
   }
 
-  def createIntState(number:Int): ChatState[Int] = ChatState(List(HumanMessage(number)))
+  def createState[T](number:T): ChatState[T] = ChatState(List(HumanMessage(number)))
 
-  def createIntEdge(from: String, to:String, f: Int => Boolean):Edge[ChatState[Int]] =
-    Edge[ChatState[Int]](from = from, to = to, s => s.messages.last match {
+  def createEdge[T](from: String, to:String, f: T => Boolean):Edge[ChatState[T]] =
+    Edge[ChatState[T]](from = from, to = to, s => s.messages.last match {
       case HumanMessage(text) => f(text)
       case AIMessage(text) => f(text)
     })

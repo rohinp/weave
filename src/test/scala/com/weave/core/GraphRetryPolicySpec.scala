@@ -13,7 +13,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
       val flakyNode =
-        createIntNode(
+        createNode(
           "flaky",
           state => {
               throw RuntimeException("boom")
@@ -28,7 +28,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .value
 
       graph.run(
-        initialState = createIntState(10),
+        initialState = createState(10),
         onEvent = events += _
       )
 
@@ -46,7 +46,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
       val flakyNode =
-        createIntNode(
+        createNode[Int](
           "flaky",
           state => {
             attempts += 1
@@ -67,7 +67,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .value
 
       graph.run(
-        initialState = createIntState(10),
+        initialState = createState(10),
         onEvent = events += _
       )
 
@@ -94,7 +94,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
       val flakyNode =
-        createIntNode(
+        createNode[Int](
           "flaky",
           state => {
             attempts += 1
@@ -115,7 +115,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .value
 
       graph.run(
-        initialState = createIntState(10),
+        initialState = createState(10),
         onEvent = events += _
       )
 
@@ -127,7 +127,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         ),
         NodeStarted("flaky"),
         NodeCompleted("flaky"),
-        CheckpointCreated("flaky", createIntState(11)),
+        CheckpointCreated("flaky", createState(11)),
         WorkflowCompleted("workflow")
       )
     }

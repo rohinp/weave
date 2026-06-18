@@ -11,8 +11,8 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
     "validates a correct graph" in {
       val graph =
         testGraph
-          .addNode(createIntNode("increment", _ + 1))
-          .addNode(createIntNode("double", _ * 2))
+          .addNode(createNode[Int]("increment", _ + 1))
+          .addNode(createNode("double", _ * 2))
           .setStart("increment")
           .setEnd("double")
           .addEdge(Edge("increment", "double"))
@@ -23,7 +23,7 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
     "fails validation when start node missing" in {
       val graph =
         testGraph
-          .addNode(createIntNode("increment", _ + 1))
+          .addNode(createNode[Int]("increment", _ + 1))
 
       graph.validate() shouldBe Left(GraphError.StartNodeNotDefined())
     }
@@ -31,7 +31,7 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
     "fails validation when start node does not exist" in {
       val graph =
         testGraph
-          .addNode(createIntNode("increment", _ + 1))
+          .addNode(createNode[Int]("increment", _ + 1))
           .setStart("missing")
 
       graph.validate() shouldBe Left(GraphError.NodeNotFound("missing"))
@@ -40,7 +40,7 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
     "fails validation when edge target missing" in {
       val graph =
         testGraph
-          .addNode(createIntNode("increment", _ + 1))
+          .addNode(createNode[Int]("increment", _ + 1))
           .setStart("increment")
           .setEnd("increment")
           .addEdge(Edge("increment", "missing"))

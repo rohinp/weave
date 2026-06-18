@@ -12,8 +12,8 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
     "emits execution events" in {
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
-      val graph = testGraph.addNode(createIntNode("increment", _ + 1))
-        .addNode(createIntNode("double", _ * 2))
+      val graph = testGraph.addNode(createNode[Int]("increment", _ + 1))
+        .addNode(createNode("double", _ * 2))
         .setStart("increment")
         .setEnd("double")
         .addEdge(Edge("increment", "double"))
@@ -21,7 +21,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .value
 
       graph.run(
-        initialState = createIntState(10),
+        initialState = createState(10),
         onEvent = events += _
       )
 
@@ -54,7 +54,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .validate()
         .value
         .run(
-          createIntState(10),
+          createState(10),
           events += _
         )
 
@@ -78,19 +78,19 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
 
       val graph = testGraph
         .addNode(
-          createIntNode(
+          createNode(
             "success",
             identity
           )
         )
         .addNode(
-          createIntNode(
+          createNode(
             "explode",
             _ => throw RuntimeException("boom")
           )
         )
         .addNode(
-          createIntNode(
+          createNode(
             "end",
             identity
           )
@@ -104,7 +104,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .validate()
         .value
         .run(
-          createIntState(10),
+          createState(10),
           events += _
         )
 
@@ -131,8 +131,8 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
 
       val graph =
         testGraph
-          .addNode(createIntNode("a", _ + 1))
-          .addNode(createIntNode("b", _ * 2))
+          .addNode(createNode[Int]("a", _ + 1))
+          .addNode(createNode("b", _ * 2))
           .setStart("a")
           .setEnd("b")
           .addEdge(Edge("a", "b"))
@@ -141,7 +141,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .validate()
         .value
         .run(
-          createIntState(10),
+          createState(10),
           events += _
         )
 

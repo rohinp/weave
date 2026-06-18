@@ -1,5 +1,7 @@
 package com.weave.core
 
+import com.weave.utility.NonEmptyList
+
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.util.chaining.*
@@ -68,13 +70,13 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
 
     //traversal BFS
     def execute(
-                 remainingNode: List[String],
-                 state: S
+                 workQueue: List[WorkItem[S]]
                ): Either[GraphError, S] = {
-      remainingNode match {
-        //TODO: execution completion needs a single owner.
-        case List() => Right(state)
-        case nodeName :: xs =>
+      println(s"Work queue: ${workQueue.map(_.nodeName).mkString(", ")}")
+      workQueue match {
+        case Nil => Right(initialState)
+        case head :: tail =>
+          val WorkItem(nodeName, state) = head
           val node = graph.nodes(nodeName)
           if (graph.end.contains(nodeName)) {
             executeNode(node, state, onEvent)
@@ -86,14 +88,12 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
                   edge.from == nodeName && edge.condition(newState)
                 )
                 .map(_.to)
-              result <- execute(xs ++ nextNodes, newState)
+              result <- execute(tail ++ nextNodes.map(n => WorkItem(n, newState)))
             } yield result
-
           }
       }
     }
-
-    execute(List.from(graph.start), initialState)
+    execute(List.from(graph.start).map(WorkItem(_,initialState)))
       .tap(result => if (result.isRight) onEvent(GraphEvent.WorkflowCompleted("workflow")) else ())
   }
 }
