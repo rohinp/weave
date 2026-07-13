@@ -1,7 +1,5 @@
 package com.weave.core
 
-import com.weave.utility.NonEmptyList
-
 import scala.annotation.tailrec
 import scala.util.{Failure, Success, Try}
 import scala.util.chaining.*
@@ -78,7 +76,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
         case head :: tail =>
           val WorkItem(nodeName, state) = head
           val node = graph.nodes(nodeName)
-          if (graph.end.contains(nodeName)) {
+          if (workQueue.length == 1 && graph.end.contains(nodeName)) {
             executeNode(node, state, onEvent)
           } else {
             for {

@@ -207,7 +207,7 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
       }
       println(s"Merge node executed $mergeCount times")
       println(s"Events: ${events.toList}")
-      mergeCount shouldBe 1
+      mergeCount shouldBe 2
     }
 
     "reducer merges multiple updates" in {
@@ -300,6 +300,59 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
       )
     }
 
+    "all queued work items are processed" in {
+      val events = collection.mutable.ListBuffer.empty[GraphEvent]
+
+      case class CounterState(value: List[Int])
+
+      sealed trait CounterUpdate
+      case class Increment(by: Int) extends CounterUpdate
+
+      val reducer =
+        new Reducer[CounterState, CounterUpdate] {
+          override def reduce(
+                               state: CounterState,
+                               update: CounterUpdate
+                             ): CounterState =
+            update match {
+              case Increment(by) => state.value match {
+                case Nil => CounterState(List(by))
+                case head :: tail => CounterState((head + by) :: tail)
+              }
+            }
+
+          override def merge(left: CounterState, right: CounterState): CounterState =
+            CounterState(left.value ++ right.value)
+        }
+
+      val graph =
+        Graph[CounterState, CounterUpdate](reducer)
+          .addNode(Node("start", _ => Increment(5)))
+          .addNode(Node("branch1", _ => Increment(10)))
+          .addNode(Node("branch2", _ => Increment(20)))
+          .addNode(Node("merge", _ => Increment(4)))
+          .setStart("start")
+          .setEnd("merge")
+          .addEdge(Edge("start", "branch1"))
+          .addEdge(Edge("start", "branch2"))
+          .addEdge(Edge("branch1", "merge"))
+          .addEdge(Edge("branch2", "merge"))
+          .validate()
+          .value
+
+      graph.run(
+        CounterState(0 :: Nil),
+        onEvent = events += _
+      ).value
+
+      val mergeCount = events.count {
+        case NodeStarted("merge") => true
+        case _ => false
+      }
+      println(s"Merge node executed $mergeCount times")
+      println(s"Events: ${events.toList}")
+      mergeCount shouldBe 2
+    }
     /*"merges states from two branches" in {
 
       val graph =
