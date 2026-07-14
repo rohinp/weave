@@ -3,6 +3,21 @@ package com.weave.core
 import com.weave.core.TestData.ChatUpdate
 
 object TestData {
+  extension [S, U](result: GraphError.ValidationError | GraphRunner[S, U])
+    def runner: GraphRunner[S, U] = result match {
+      case value: GraphRunner[S, U] => value
+      case error => fail(error.toString)
+    }
+
+  extension [S](result: GraphError.ExecutionError | S)
+    def state: S = result match {
+      case error: GraphError.RuntimeError => fail(error.toString)
+      case value => value.asInstanceOf[S]
+    }
+
+  private def fail(message: String): Nothing =
+    throw AssertionError(message)
+
   sealed trait Message[M]
 
   case class HumanMessage[M](text: M) extends Message[M]

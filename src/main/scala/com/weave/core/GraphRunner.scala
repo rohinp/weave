@@ -44,7 +44,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
                            node: Node[S, U],
                            state: S,
                            onEvent: GraphEvent => Unit
-                         ): Either[GraphError, S] = {
+                         ): GraphError.ExecutionError | S = {
     attemptExecuteNode(node, state, onEvent)
       .pipe(previousResult => {
         node.retryPolicy match {
@@ -55,43 +55,45 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
       }).fold(
         ex => {
           onEvent(GraphEvent.WorkflowFailed("workflow",ex))
-          Left(GraphError.RuntimeError(node.name, ex))
+          GraphError.RuntimeError(node.name, ex)
         },
-        Right(_)
+        identity
       )
   }
 
   def run(
            initialState: S,
            onEvent: GraphEvent => Unit = _ => ()
-         ): Either[GraphError, S] = {
+         ): GraphError.ExecutionError | S = {
 
     //traversal BFS
     def execute(
                  workQueue: List[WorkItem[S]]
-               ): Either[GraphError, S] = {
+               ): GraphError.ExecutionError | S = {
       println(s"Work queue: ${workQueue.map(_.nodeName).mkString(", ")}")
       workQueue match {
-        case Nil => Right(initialState)
+        case Nil => initialState
         case head :: tail =>
           val WorkItem(nodeName, state) = head
           val node = graph.nodes(nodeName)
-          if (workQueue.length == 1 && graph.end.contains(nodeName)) {
-            executeNode(node, state, onEvent)
-          } else {
-            for {
-              newState <- executeNode(node, state, onEvent)
-              nextNodes = graph.edges
-                .filter(edge =>
-                  edge.from == nodeName && edge.condition(newState)
-                )
+          executeNode(node, state, onEvent) match {
+            case error: GraphError.RuntimeError => error
+            case newState if workQueue.length == 1 && graph.end.contains(nodeName) => newState
+            case newState =>
+              // The error branch has been removed; the remaining union member is S.
+              val state = newState.asInstanceOf[S]
+              val nextNodes = graph.edges
+                .filter(edge => edge.from == nodeName && edge.condition(state))
                 .map(_.to)
-              result <- execute(tail ++ nextNodes.map(n => WorkItem(n, newState)))
-            } yield result
+              val nextWork = tail ++ nextNodes.map(n => WorkItem(n, state))
+              if (nextWork.isEmpty) state else execute(nextWork)
           }
       }
     }
     execute(List.from(graph.start).map(WorkItem(_,initialState)))
-      .tap(result => if (result.isRight) onEvent(GraphEvent.WorkflowCompleted("workflow")) else ())
+      .tap {
+        case _: GraphError.RuntimeError => ()
+        case _ => onEvent(GraphEvent.WorkflowCompleted("workflow"))
+      }
   }
 }

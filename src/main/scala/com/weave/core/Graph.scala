@@ -52,30 +52,30 @@ object Graph {
 
   extension [S, U](graph: Graph[S, U])
     /*TODO: Check mixin types*/
-    def validate(): Either[GraphError, GraphRunner[S, U]] = {
+    def validate(): GraphError.ValidationError | GraphRunner[S, U] = {
       import graph.*
       // TODO: Refactor this validation logic to be more concise and readable
       if (nodes.isEmpty) {
-        Left(GraphError.EmptyGraph())
+        GraphError.EmptyGraph()
       } else if (start.isEmpty) {
-        Left(GraphError.StartNodeNotDefined())
+        GraphError.StartNodeNotDefined()
       } else if (!nodes.contains(start.get)) {
-        Left(GraphError.NodeNotFound(start.get))
+        GraphError.NodeNotFound(start.get)
       } else if (end.isEmpty) {
-        Left(GraphError.EndNodeNotDefined())
+        GraphError.EndNodeNotDefined()
       } else if (!nodes.contains(end.get)) {
-        Left(GraphError.NodeNotFound(end.get))
+        GraphError.NodeNotFound(end.get)
       } else {
         edges.find { case Edge(from, to, condition) =>
           !nodes.contains(from) || !nodes.contains(to)
         } match {
           case Some(Edge(from, to, condition)) =>
             if (!nodes.contains(from)) {
-              Left(GraphError.NodeNotFound(from))
+              GraphError.NodeNotFound(from)
             } else {
-              Left(GraphError.NodeNotFound(to))
+              GraphError.NodeNotFound(to)
             }
-          case None => Right(new GraphRunner[S,U](graph)) // graph
+          case None => new GraphRunner[S,U](graph)
         }
       }
     }
