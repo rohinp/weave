@@ -1,11 +1,10 @@
 package com.weave.core
 
-import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import TestData.*
 
-class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValues{
+class GraphValidationSpec extends AnyWordSpecLike with Matchers {
 
   "Graph validation" must {
     "validates a correct graph" in {
@@ -17,7 +16,10 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
           .setEnd("double")
           .addEdge(Edge("increment", "double"))
 
-      graph.validate().isRight shouldBe true
+      graph.validate() match {
+        case _: GraphRunner[?, ?] => succeed
+        case error => fail(error.toString)
+      }
     }
 
     "fails validation when start node missing" in {
@@ -25,7 +27,7 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
         testGraph
           .addNode(createNode[Int]("increment", _ + 1))
 
-      graph.validate() shouldBe Left(GraphError.StartNodeNotDefined())
+      graph.validate() shouldBe GraphError.StartNodeNotDefined()
     }
 
     "fails validation when start node does not exist" in {
@@ -34,7 +36,7 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
           .addNode(createNode[Int]("increment", _ + 1))
           .setStart("missing")
 
-      graph.validate() shouldBe Left(GraphError.NodeNotFound("missing"))
+      graph.validate() shouldBe GraphError.NodeNotFound("missing")
     }
 
     "fails validation when edge target missing" in {
@@ -45,7 +47,7 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers with EitherValue
           .setEnd("increment")
           .addEdge(Edge("increment", "missing"))
 
-      graph.validate() shouldBe Left(GraphError.NodeNotFound("missing"))
+      graph.validate() shouldBe GraphError.NodeNotFound("missing")
     }
   }
 

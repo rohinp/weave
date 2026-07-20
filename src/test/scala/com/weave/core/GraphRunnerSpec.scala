@@ -1,11 +1,10 @@
 package com.weave.core
 
-import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import TestData.*
 
-class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
+class GraphRunnerSpec extends AnyWordSpecLike with Matchers {
 
   "Graph Runner" must {
     "runs a simple graph from start to end" in {
@@ -20,7 +19,7 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .addEdge(Edge("increment", "double"))
           .setEnd("double")
 
-      graph.validate().value.run(createState(10)) shouldBe Right(ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22))))
+      graph.validate().runner.run(createState(10)).state shouldBe ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22)))
 
     }
 
@@ -38,10 +37,10 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
       val result =
         graph
           .validate()
-          .getOrElse(fail("validation failed"))
+          .runner
           .run(createState(10))
 
-      result shouldBe Right(ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22))))
+      result.state shouldBe ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22)))
     }
 
     "returns result when start and end are same node" in {
@@ -54,10 +53,10 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
       val result =
         graph
           .validate()
-          .getOrElse(fail("validation failed"))
+          .runner
           .run(createState(10))
 
-      result shouldBe Right(ChatState(List(HumanMessage(10), HumanMessage(11))))
+      result.state shouldBe ChatState(List(HumanMessage(10), HumanMessage(11)))
     }
 
     "routes based on state" in {
@@ -74,9 +73,9 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers with EitherValues{
           .addEdge(createEdge("start", "negative", _ <= 0))
 
       val result =
-        graph.validate().toOption.get.run(createState(5))
+        graph.validate().runner.run(createState(5))
 
-      result shouldBe Right(ChatState(List(HumanMessage(5), HumanMessage(5), HumanMessage(50))))
+      result.state shouldBe ChatState(List(HumanMessage(5), HumanMessage(5), HumanMessage(50)))
     }
 
   }

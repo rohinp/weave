@@ -1,11 +1,11 @@
 package com.weave.core
 
 import com.weave.core.GraphEvent.{CheckpointCreated, NodeCompleted, NodeStarted, WorkflowCompleted}
-import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
+import TestData.*
 
-class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
+class GraphReducerSpec extends AnyWordSpecLike with Matchers {
 
   "Graph Reducer" must {
     "applies reducer after node execution" in {
@@ -52,12 +52,12 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
           .setEnd("assistant")
           .addEdge(Edge("user", "assistant"))
           .validate()
-          .value
+          .runner
 
       val result =
         graph.run(ChatState(Nil))
 
-      result.value.messages shouldBe List(
+      result.state.messages shouldBe List(
         HumanMessage("hello"),
         AIMessage("hi")
       )
@@ -95,9 +95,9 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
           .addEdge(Edge("increment", "large", _.value >= 10))
           .addEdge(Edge("increment", "small", _.value < 10))
           .validate()
-          .value
+          .runner
 
-      graph.run(CounterState(5)).value shouldBe CounterState(100)
+      graph.run(CounterState(5)).state shouldBe CounterState(100)
     }
 
     "branches receive independent copies of state" in {
@@ -135,12 +135,12 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
           .addEdge(Edge("start", "branch1"))
           .addEdge(Edge("start", "branch2"))
           .validate()
-          .value
+          .runner
 
       val result = graph.run(
         CounterState(0 :: Nil),
         onEvent = events += _
-      ).value
+      ).state
 
       events.toList shouldBe List(
         NodeStarted("start"),
@@ -194,12 +194,12 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
           .addEdge(Edge("branch1", "merge"))
           .addEdge(Edge("branch2", "merge"))
           .validate()
-          .value
+          .runner
 
       graph.run(
         CounterState(0 :: Nil),
         onEvent = events += _
-      ).value
+      ).state
 
       val mergeCount = events.count {
         case NodeStarted("merge") => true
@@ -338,12 +338,12 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers with EitherValues {
           .addEdge(Edge("branch1", "merge"))
           .addEdge(Edge("branch2", "merge"))
           .validate()
-          .value
+          .runner
 
       graph.run(
         CounterState(0 :: Nil),
         onEvent = events += _
-      ).value
+      ).state
 
       val mergeCount = events.count {
         case NodeStarted("merge") => true

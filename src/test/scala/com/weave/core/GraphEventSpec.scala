@@ -1,12 +1,11 @@
 package com.weave.core
 
 import com.weave.core.GraphEvent.*
-import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import TestData.*
 
-class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
+class GraphEventSpec extends AnyWordSpecLike with Matchers {
 
   "Graph Events" must {
     "emits execution events" in {
@@ -18,7 +17,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
         .setEnd("double")
         .addEdge(Edge("increment", "double"))
         .validate()
-        .value
+        .runner
 
       graph.run(
         initialState = createState(10),
@@ -52,7 +51,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
 
       graph
         .validate()
-        .value
+        .runner
         .run(
           createState(10),
           events += _
@@ -102,7 +101,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
 
       graph
         .validate()
-        .value
+        .runner
         .run(
           createState(10),
           events += _
@@ -139,7 +138,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers with EitherValues {
 
       graph
         .validate()
-        .value
+        .runner
         .run(
           createState(10),
           events += _

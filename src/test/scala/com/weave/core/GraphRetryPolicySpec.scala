@@ -1,12 +1,11 @@
 package com.weave.core
 
 import com.weave.core.GraphEvent.*
-import org.scalatest.EitherValues
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import TestData.*
 
-class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValues {
+class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
 
   "Graph Retry policies" must {
     "do not retries a failing node" in {
@@ -25,7 +24,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .setStart("flaky")
         .setEnd("flaky")
         .validate()
-        .value
+        .runner
 
       graph.run(
         initialState = createState(10),
@@ -64,7 +63,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .setStart("flaky")
         .setEnd("flaky")
         .validate()
-        .value
+        .runner
 
       graph.run(
         initialState = createState(10),
@@ -112,7 +111,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers with EitherValu
         .setStart("flaky")
         .setEnd("flaky")
         .validate()
-        .value
+        .runner
 
       graph.run(
         initialState = createState(10),
