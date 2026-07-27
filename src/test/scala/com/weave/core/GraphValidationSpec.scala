@@ -49,6 +49,29 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers {
 
       graph.validate() shouldBe GraphError.NodeNotFound("missing")
     }
+
+    "check if a node has multiple parent" in {
+      val graph =
+        testGraph
+          .addNode(createNode[Int]("start", _ + 0))
+          .addNode(createNode[Int]("a", _ + 1))
+          .addNode(createNode[Int]("b", _ + 2))
+          .addNode(createNode[Int]("m", _ + 0))
+          .setStart("start")
+          .setEnd("m")
+          .addEdge(Edge("start", "a"))
+          .addEdge(Edge("start", "b"))
+          .addEdge(Edge("a", "m"))
+          .addEdge(Edge("b", "m"))
+
+      val (x, y) = graph.nextNodes("b", ChatState(List(AIMessage(0)))).partition(graph.isMultipleParentNode)
+      
+      x shouldBe List("m")
+      y shouldBe List()
+    }
+    
+    
+    
   }
 
 }

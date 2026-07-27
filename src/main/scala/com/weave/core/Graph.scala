@@ -23,6 +23,16 @@ case class Graph[S, U] private(
        |${rendered.mkString("\n")}
        |""".stripMargin
   }
+
+  def nextNodes(nodeName: String, state: S): List[String] =
+    edges
+      .filter(edge => edge.from == nodeName && edge.condition(state))
+      .map(_.to)
+
+  private def countParent(nodeName: String): Int = 
+    edges.count(edge => edge.to == nodeName)
+    
+  def isMultipleParentNode(nodeName: String): Boolean = countParent(nodeName) > 1
 }
 
 object Graph {
