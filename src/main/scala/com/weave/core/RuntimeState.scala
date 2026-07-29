@@ -4,15 +4,15 @@ import scala.collection.immutable.Queue
 
 case class RuntimeState[S](
                             workQueue: Queue[WorkItem[S]],
-                            pendingJoins: Map[String, List[S]]
+                            pendingJoins: Map[String, List[JoinInput[S]]]
                           ) {
 
   def isJoinPending: Boolean = pendingJoins.nonEmpty
   
-  def update(newWorkItems: List[WorkItem[S]], newPendingJoins:Map[String, List[S]]): RuntimeState[S] = 
+  def update(newWorkItems: List[WorkItem[S]], newPendingJoins:Map[String, List[JoinInput[S]]]): RuntimeState[S] = 
     copy(workQueue = workQueue ++ newWorkItems, pendingJoins = updatePendingJoins(newPendingJoins))
     
-  private def updatePendingJoins(newPendingJoins: Map[String, List[S]]): Map[String, List[S]] = {
+  private def updatePendingJoins(newPendingJoins: Map[String, List[JoinInput[S]]]): Map[String, List[JoinInput[S]]] = {
     newPendingJoins.foldLeft(pendingJoins){
       case (acc, (nodeName, states)) => 
         if acc.contains(nodeName) then acc + (nodeName -> (acc(nodeName) ++ states)) else acc + (nodeName -> states)
