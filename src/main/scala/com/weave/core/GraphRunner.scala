@@ -46,7 +46,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
       node: Node[S, U],
       state: S,
       onEvent: GraphEvent => Unit
-  ): GraphError.ExecutionError | S = {
+  ): Either[GraphError.ExecutionError, S] = {
     attemptExecuteNode(node, state, onEvent)
       .pipe(previousResult => {
         node.retryPolicy match {
@@ -58,9 +58,9 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
       .fold(
         ex => {
           onEvent(GraphEvent.WorkflowFailed("workflow", ex))
-          GraphError.RuntimeError(node.name, ex)
+          Left(GraphError.RuntimeError(node.name, ex))
         },
-        identity
+        Right(_)
       )
   }
 
@@ -80,12 +80,9 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
         case (WorkItem[S](nodeName, state), newRuntimeState) => {
           val result = executeNode(graph.nodes(nodeName), state, onEvent)
           result match {
-            case error @ GraphError.ExecutionError(_, _) => error
-            case nextCase                                =>
-              // Had to deal with type issues in scala 3 for abstract types in pattern match.
-              val newState: S = nextCase.asInstanceOf[S]
+            case Left(error) => error
+            case Right(newState) =>
               // get child(s). Only those whose edges pass condition.
-              val nextNodes = graph.nextNodes(nodeName, newState)
               // 5. If child node is dependent on multiple node, move to pending-joins queue.
               // 6. If child node not dependent then add to work-queue.
               val (nodesForPendingJoins, nodesForWorkQueue) = graph
@@ -94,7 +91,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
 
               val updatedRuntimeState = newRuntimeState.update(
                 nodesForWorkQueue.map(n => WorkItem(n, newState)),
-                nodesForPendingJoins.map(n => n -> List(newState)).toMap
+                nodesForPendingJoins.map(n => n -> List(JoinInput(nodeName,newState))).toMap
               )
               // 7. Start the loop again. Continue till both pending-joins and work-queue are empty.
               execute(
@@ -121,9 +118,9 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
             // If all parent processed move to work-queue
             val newRuntimeState = finishedJoins.foldLeft(runtimeState) {
               case (runtimeStateAcc, nodeName) =>
-                val head :: tail: List[S] =
+                val joinInputs =
                   runtimeState.pendingJoins(nodeName).runtimeChecked
-                val combinedState = graph.reducer.merge(head, tail*)
+                val combinedState = graph.reducer.merge(joinInputs.head.state, joinInputs.tail.map(_.state)*)
                 runtimeStateAcc
                   .copy(
                     workQueue = runtimeStateAcc.workQueue.enqueue(
