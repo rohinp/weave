@@ -1,18 +1,18 @@
 package com.weave.core
 
-case class Graph[S, U] private(
-                                nodes: Map[String, Node[S, U]],
-                                edges: List[Edge[S]],
-                                start: Option[String],
-                                end: Option[String],
-                                reducer: Reducer[S, U]
-                              ) {
+case class Graph[S, U] private (
+    nodes: Map[String, Node[S, U]],
+    edges: List[Edge[S]],
+    start: Option[String],
+    end: Option[String],
+    reducer: Reducer[S, U]
+) {
   override def toString: String = {
     val rendered =
       nodes.keys.toList.sorted.map { node =>
         edges.find(_.from == node) match {
           case Some(next) => s"  $node ──${next.condition}──▶ ${next.to}"
-          case None => s"  $node"
+          case None       => s"  $node"
         }
       }
 
@@ -29,14 +29,15 @@ case class Graph[S, U] private(
       .filter(edge => edge.from == nodeName && edge.condition(state))
       .map(_.to)
 
-  private def countParent(nodeName: String): Int = 
+  private def countParent(nodeName: String): Int =
     edges.count(edge => edge.to == nodeName)
-    
-  def isMultipleParentNode(nodeName: String): Boolean = countParent(nodeName) > 1
+
+  def isMultipleParentNode(nodeName: String): Boolean =
+    countParent(nodeName) > 1
 }
 
 object Graph {
-  def apply[S, U](reducer:Reducer[S,U]): Graph[S, U] = new Graph(
+  def apply[S, U](reducer: Reducer[S, U]): Graph[S, U] = new Graph(
     nodes = Map.empty,
     edges = List.empty,
     start = None,
@@ -52,7 +53,7 @@ object Graph {
     def addEdge(edge: Edge[S]): Graph[S, U] =
       graph.copy(edges = edge :: graph.edges)
 
-  extension [S,U](graph: Graph[S, U])
+  extension [S, U](graph: Graph[S, U])
     def setStart(nodeName: String): Graph[S, U] =
       graph.copy(start = Some(nodeName))
 
@@ -85,7 +86,7 @@ object Graph {
             } else {
               GraphError.NodeNotFound(to)
             }
-          case None => new GraphRunner[S,U](graph)
+          case None => new GraphRunner[S, U](graph)
         }
       }
     }

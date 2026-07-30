@@ -18,7 +18,7 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers {
 
       graph.validate() match {
         case _: GraphRunner[?, ?] => succeed
-        case error => fail(error.toString)
+        case error                => fail(error.toString)
       }
     }
 
@@ -64,14 +64,14 @@ class GraphValidationSpec extends AnyWordSpecLike with Matchers {
           .addEdge(Edge("a", "m"))
           .addEdge(Edge("b", "m"))
 
-      val (x, y) = graph.nextNodes("b", ChatState(List(AIMessage(0)))).partition(graph.isMultipleParentNode)
-      
+      val (x, y) = graph
+        .nextNodes("b", ChatState(List(AIMessage(0))))
+        .partition(graph.isMultipleParentNode)
+
       x shouldBe List("m")
       y shouldBe List()
     }
-    
-    
-    
+
   }
 
 }
