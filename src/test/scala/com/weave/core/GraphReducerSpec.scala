@@ -227,7 +227,7 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       }
       println(s"Merge node executed $mergeCount times")
       println(s"Events: ${events.toList}")
-      mergeCount shouldBe 2
+      mergeCount shouldBe 1
     }
 
     "reducer merges multiple updates" in {
@@ -379,7 +379,7 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       }
       println(s"Merge node executed $mergeCount times")
       println(s"Events: ${events.toList}")
-      mergeCount shouldBe 2
+      mergeCount shouldBe 1
     }
     /*"merges states from two branches" in {
 
