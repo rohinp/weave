@@ -76,9 +76,10 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
         onEvent: GraphEvent => Unit
     ): GraphError.ExecutionError | S = {
       // 4. Pick a node from work-queue, execute,
-      RuntimeState.fetchWorkItems(runtimeState) match {
-        case (WorkItem[S](nodeName, state), newRuntimeState) => {
-          val result = executeNode(graph.nodes(nodeName), state, onEvent)
+      runtimeState.dequeue match {
+        case Some(workItem, newRuntimeState) => {
+          val result =
+            executeNode(graph.nodes(workItem.nodeName), workItem.state, onEvent)
           result match {
             case Left(error)     => error
             case Right(newState) =>
@@ -86,26 +87,27 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
               // 5. If child node is dependent on multiple node, move to pending-joins queue.
               // 6. If child node not dependent then add to work-queue.
               val (nodesForPendingJoins, nodesForWorkQueue) = graph
-                .nextNodes(nodeName, newState)
+                .nextNodes(workItem.nodeName, newState)
                 .partition(graph.isMultipleParentNode)
 
-              val updatedRuntimeState = newRuntimeState.update(
-                nodesForWorkQueue.map(n => WorkItem(n, newState)),
-                nodesForPendingJoins
-                  .map(n => n -> List(JoinInput(nodeName, newState)))
-                  .toMap
-              )
+              val updatedRuntimeState = newRuntimeState
+                .enqueue(nodesForWorkQueue.map(n => WorkItem(n, newState)))
+                .addMultipleJoinArrival(
+                  nodesForPendingJoins
+                    .map(n => PendingJoinInput(n, workItem.nodeName, newState))
+                )
+
               // 7. Start the loop again. Continue till both pending-joins and work-queue are empty.
               execute(
                 updatedRuntimeState,
-                stateAcc.update(nodeName -> newState),
+                stateAcc.update(workItem.nodeName -> newState),
                 onEvent
               )
           }
         }
 
         // Check if Pending Joins.
-        case RuntimeState.EmptyWorkQueue if runtimeState.isJoinPending =>
+        case None if runtimeState.isJoinPending =>
           val finishedJoins =
             RuntimeState.finishedJoins(
               runtimeState,
@@ -124,10 +126,10 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
             val newRuntimeState = finishedJoins.foldLeft(runtimeState) {
               case (runtimeStateAcc, nodeName) =>
                 val joinInputs =
-                  runtimeState.pendingJoins(nodeName).runtimeChecked
+                  runtimeState.pendingJoins(nodeName).values.toList
                 val combinedState = graph.reducer.merge(
-                  joinInputs.head.state,
-                  joinInputs.tail.map(_.state)*
+                  joinInputs.head,
+                  joinInputs.tail*
                 )
                 runtimeStateAcc
                   .copy(
@@ -140,7 +142,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
             }
             execute(newRuntimeState, stateAcc, onEvent)
           }
-        case RuntimeState.EmptyWorkQueue =>
+        case None =>
           graph.end.flatMap(stateAcc.get) match {
             case Some(resultState) => resultState
             case None              =>

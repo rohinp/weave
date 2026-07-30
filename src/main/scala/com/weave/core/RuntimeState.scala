@@ -4,50 +4,47 @@ import scala.collection.immutable.Queue
 
 case class RuntimeState[S](
     workQueue: Queue[WorkItem[S]],
-    pendingJoins: Map[String, List[JoinInput[S]]]
+    pendingJoins: Map[String, Map[String, S]]
 ) {
 
   def isJoinPending: Boolean = pendingJoins.nonEmpty
 
-  def update(
-      newWorkItems: List[WorkItem[S]],
-      newPendingJoins: Map[String, List[JoinInput[S]]]
+  def dequeue: Option[(WorkItem[S], RuntimeState[S])] =
+    workQueue.dequeueOption.map { case (item, remaining) =>
+      item -> copy(workQueue = remaining)
+    }
+
+  def enqueue(items: Iterable[WorkItem[S]]): RuntimeState[S] =
+    copy(workQueue = workQueue.enqueueAll(items))
+
+  private def addJoinArrival(
+      joinInput: PendingJoinInput[S]
   ): RuntimeState[S] =
     copy(
-      workQueue = workQueue ++ newWorkItems,
-      pendingJoins = updatePendingJoins(newPendingJoins)
+      pendingJoins = pendingJoins.updatedWith(joinInput.joinNode) {
+        case Some(arrivals) =>
+          Some(arrivals.updated(joinInput.parentNode, joinInput.state))
+
+        case None =>
+          Some(Map(joinInput.parentNode -> joinInput.state))
+      }
     )
 
-  private def updatePendingJoins(
-      newPendingJoins: Map[String, List[JoinInput[S]]]
-  ): Map[String, List[JoinInput[S]]] = {
-    newPendingJoins.foldLeft(pendingJoins) { case (acc, (nodeName, states)) =>
-      if acc.contains(nodeName) then
-        acc + (nodeName -> (acc(nodeName) ++ states))
-      else acc + (nodeName -> states)
-    }
+  def addMultipleJoinArrival(
+      joinInputs: List[PendingJoinInput[S]]
+  ): RuntimeState[S] = joinInputs.foldLeft(this) { case (acc, pji) =>
+    acc.addJoinArrival(pji)
   }
+
+  def removeJoin(nodeName: String): RuntimeState[S] =
+    copy(pendingJoins = pendingJoins.removed(nodeName))
+
 }
 
 object RuntimeState {
 
   case object EmptyWorkQueue
   case object NoneCompletedJoins
-
-  case class PendingJoinInput[S](
-      joinNode: String,
-      fromNode: String,
-      state: S
-  )
-
-  def fetchWorkItems[S](
-      state: RuntimeState[S]
-  ): (WorkItem[S], RuntimeState[S]) | EmptyWorkQueue.type = {
-    state.workQueue.dequeueOption match {
-      case Some((workItem, queue)) => (workItem, state.copy(workQueue = queue))
-      case None                    => EmptyWorkQueue
-    }
-  }
 
   // join completion depends on arrivals
   def finishedJoins[S](
