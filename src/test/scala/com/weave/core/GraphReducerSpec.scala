@@ -1,6 +1,11 @@
 package com.weave.core
 
-import com.weave.core.GraphEvent.{CheckpointCreated, NodeCompleted, NodeStarted, WorkflowCompleted}
+import com.weave.core.GraphEvent.{
+  CheckpointCreated,
+  NodeCompleted,
+  NodeStarted,
+  WorkflowCompleted
+}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import TestData.*
@@ -21,9 +26,9 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       val reducer =
         new Reducer[ChatState, ChatUpdate] {
           override def reduce(
-                               state: ChatState,
-                               update: ChatUpdate
-                             ): ChatState = {
+              state: ChatState,
+              update: ChatUpdate
+          ): ChatState = {
             update match {
               case AppendMessage(message) =>
                 state.copy(messages = state.messages :+ message)
@@ -73,15 +78,18 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       val reducer =
         new Reducer[CounterState, CounterUpdate] {
           override def reduce(
-                               state: CounterState,
-                               update: CounterUpdate
-                             ): CounterState =
+              state: CounterState,
+              update: CounterUpdate
+          ): CounterState =
             update match {
               case Increment(by) => state.copy(value = state.value + by)
-              case Multiply(by) => state.copy(value = state.value * by)
+              case Multiply(by)  => state.copy(value = state.value * by)
             }
 
-          override def merge(left: CounterState, right: CounterState): CounterState =
+          override def merge(
+              left: CounterState,
+              right: CounterState
+          ): CounterState =
             CounterState(left.value + right.value)
         }
 
@@ -111,17 +119,21 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       val reducer =
         new Reducer[CounterState, CounterUpdate] {
           override def reduce(
-                               state: CounterState,
-                               update: CounterUpdate
-                             ): CounterState =
+              state: CounterState,
+              update: CounterUpdate
+          ): CounterState =
             update match {
-              case Increment(by) => state.value match {
-                case Nil => CounterState(List(by))
-                case head :: tail => CounterState((head + by) :: tail)
-              }
+              case Increment(by) =>
+                state.value match {
+                  case Nil          => CounterState(List(by))
+                  case head :: tail => CounterState((head + by) :: tail)
+                }
             }
 
-          override def merge(left: CounterState, right: CounterState): CounterState =
+          override def merge(
+              left: CounterState,
+              right: CounterState
+          ): CounterState =
             CounterState(left.value ++ right.value)
         }
 
@@ -137,10 +149,12 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
           .validate()
           .runner
 
-      val result = graph.run(
-        CounterState(0 :: Nil),
-        onEvent = events += _
-      ).state
+      val result = graph
+        .run(
+          CounterState(0 :: Nil),
+          onEvent = events += _
+        )
+        .state
 
       events.toList shouldBe List(
         NodeStarted("start"),
@@ -167,17 +181,21 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       val reducer =
         new Reducer[CounterState, CounterUpdate] {
           override def reduce(
-                               state: CounterState,
-                               update: CounterUpdate
-                             ): CounterState =
+              state: CounterState,
+              update: CounterUpdate
+          ): CounterState =
             update match {
-              case Increment(by) => state.value match {
-                case Nil => CounterState(List(by))
-                case head :: tail => CounterState((head + by) :: tail)
-              }
+              case Increment(by) =>
+                state.value match {
+                  case Nil          => CounterState(List(by))
+                  case head :: tail => CounterState((head + by) :: tail)
+                }
             }
 
-          override def merge(left: CounterState, right: CounterState): CounterState =
+          override def merge(
+              left: CounterState,
+              right: CounterState
+          ): CounterState =
             CounterState(left.value ++ right.value)
         }
 
@@ -196,14 +214,16 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
           .validate()
           .runner
 
-      graph.run(
-        CounterState(0 :: Nil),
-        onEvent = events += _
-      ).state
+      graph
+        .run(
+          CounterState(0 :: Nil),
+          onEvent = events += _
+        )
+        .state
 
       val mergeCount = events.count {
         case NodeStarted("merge") => true
-        case _ => false
+        case _                    => false
       }
       println(s"Merge node executed $mergeCount times")
       println(s"Events: ${events.toList}")
@@ -221,9 +241,9 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
         new Reducer[ChatState, ChatUpdate] {
 
           override def reduce(
-                               state: ChatState,
-                               update: ChatUpdate
-                             ): ChatState =
+              state: ChatState,
+              update: ChatUpdate
+          ): ChatState =
             update match {
               case AppendMessage(msg) =>
                 state.copy(messages = state.messages :+ msg)
@@ -278,9 +298,9 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
         new Reducer[ChatState, ChatUpdate] {
 
           override def reduce(
-                               state: ChatState,
-                               update: ChatUpdate
-                             ): ChatState =
+              state: ChatState,
+              update: ChatUpdate
+          ): ChatState =
             update match {
               case AppendMessage(msg) =>
                 state.copy(messages = state.messages :+ msg)
@@ -290,10 +310,12 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
             ChatState(left.messages ++ right.messages.drop(1))
         }
 
-      reducer.merge(
-        left,
-        right
-      ).messages shouldBe List(
+      reducer
+        .merge(
+          left,
+          right
+        )
+        .messages shouldBe List(
         "question",
         "doc answer",
         "web answer"
@@ -311,17 +333,21 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       val reducer =
         new Reducer[CounterState, CounterUpdate] {
           override def reduce(
-                               state: CounterState,
-                               update: CounterUpdate
-                             ): CounterState =
+              state: CounterState,
+              update: CounterUpdate
+          ): CounterState =
             update match {
-              case Increment(by) => state.value match {
-                case Nil => CounterState(List(by))
-                case head :: tail => CounterState((head + by) :: tail)
-              }
+              case Increment(by) =>
+                state.value match {
+                  case Nil          => CounterState(List(by))
+                  case head :: tail => CounterState((head + by) :: tail)
+                }
             }
 
-          override def merge(left: CounterState, right: CounterState): CounterState =
+          override def merge(
+              left: CounterState,
+              right: CounterState
+          ): CounterState =
             CounterState(left.value ++ right.value)
         }
 
@@ -340,14 +366,16 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
           .validate()
           .runner
 
-      graph.run(
-        CounterState(0 :: Nil),
-        onEvent = events += _
-      ).state
+      graph
+        .run(
+          CounterState(0 :: Nil),
+          onEvent = events += _
+        )
+        .state
 
       val mergeCount = events.count {
         case NodeStarted("merge") => true
-        case _ => false
+        case _                    => false
       }
       println(s"Merge node executed $mergeCount times")
       println(s"Events: ${events.toList}")

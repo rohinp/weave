@@ -1,6 +1,6 @@
 package com.weave.core
 
 case class WorkItem[S](
-                        nodeName: String,
-                        state: S
-                      )
+    nodeName: String,
+    state: S
+)

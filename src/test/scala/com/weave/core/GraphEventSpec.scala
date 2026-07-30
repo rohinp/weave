@@ -11,7 +11,8 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
     "emits execution events" in {
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
-      val graph = testGraph.addNode(createNode[Int]("increment", _ + 1))
+      val graph = testGraph
+        .addNode(createNode[Int]("increment", _ + 1))
         .addNode(createNode("double", _ * 2))
         .setStart("increment")
         .setEnd("double")
@@ -27,11 +28,18 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
       events.toList shouldBe List(
         NodeStarted("increment"),
         NodeCompleted("increment"),
-        CheckpointCreated("increment", ChatState(List(HumanMessage(10), HumanMessage(11)))),
+        CheckpointCreated(
+          "increment",
+          ChatState(List(HumanMessage(10), HumanMessage(11)))
+        ),
         NodeStarted("double"),
         NodeCompleted("double"),
-        CheckpointCreated("double", ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22)))),
-        WorkflowCompleted("workflow"))
+        CheckpointCreated(
+          "double",
+          ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22)))
+        ),
+        WorkflowCompleted("workflow")
+      )
     }
 
     "emits node and workflow failure events" in {
@@ -110,7 +118,10 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
       events.toList shouldBe List(
         GraphEvent.NodeStarted("success"),
         GraphEvent.NodeCompleted("success"),
-        CheckpointCreated("success", ChatState(List(HumanMessage(10), HumanMessage(10)))),
+        CheckpointCreated(
+          "success",
+          ChatState(List(HumanMessage(10), HumanMessage(10)))
+        ),
         GraphEvent.NodeStarted("explode"),
         GraphEvent.NodeFailed(
           "explode",
@@ -144,8 +155,8 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
           events += _
         )
 
-      events.collect {
-        case c: CheckpointCreated[_] => c
+      events.collect { case c: CheckpointCreated[_] =>
+        c
       } shouldBe List(
         CheckpointCreated("a", 11),
         CheckpointCreated("b", 22)

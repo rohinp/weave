@@ -2,7 +2,7 @@ name := "Weave"
 
 version := "1.0"
 
-scalaVersion := "3.8.3"
+scalaVersion := "3.8.4"
 
 lazy val pekkoVersion = "1.4.0"
 

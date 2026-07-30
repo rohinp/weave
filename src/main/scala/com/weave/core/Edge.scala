@@ -1,10 +1,10 @@
 package com.weave.core
 
 case class Edge[S](
-                    from: String,
-                    to: String,
-                    condition: S => Boolean
-                  )
+    from: String,
+    to: String,
+    condition: S => Boolean
+)
 
 object Edge {
   def apply[S](from: String, to: String): Edge[S] = {

@@ -16,9 +16,10 @@ object GraphError {
   case class EndNodeNotDefined() {
     def message: String = "End node not defined"
   }
-  
+
   case class RuntimeError(nodeName: String, cause: Throwable) {
-    def message: String = s"Runtime error in node '$nodeName': ${cause.getMessage}"
+    def message: String =
+      s"Runtime error in node '$nodeName': ${cause.getMessage}"
   }
 
   type ValidationError =

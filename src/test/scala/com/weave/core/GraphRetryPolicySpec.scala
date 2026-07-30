@@ -15,10 +15,10 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
         createNode(
           "flaky",
           state => {
-              throw RuntimeException("boom")
+            throw RuntimeException("boom")
           }
         )
-        
+
       val graph = testGraph
         .addNode(flakyNode)
         .setStart("flaky")
@@ -37,7 +37,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
           "flaky",
           RuntimeException("boom")
         ),
-        WorkflowFailed("workflow",RuntimeException("boom"))
+        WorkflowFailed("workflow", RuntimeException("boom"))
       ).toString
     }
     "retries a failing node" in {
@@ -83,7 +83,10 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
         ),
         NodeStarted("flaky"),
         NodeCompleted("flaky"),
-        CheckpointCreated("flaky", ChatState(List(HumanMessage(10), HumanMessage(11)))),
+        CheckpointCreated(
+          "flaky",
+          ChatState(List(HumanMessage(10), HumanMessage(11)))
+        ),
         WorkflowCompleted("workflow")
       )
     }

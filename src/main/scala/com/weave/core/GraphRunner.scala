@@ -80,7 +80,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
         case (WorkItem[S](nodeName, state), newRuntimeState) => {
           val result = executeNode(graph.nodes(nodeName), state, onEvent)
           result match {
-            case Left(error) => error
+            case Left(error)     => error
             case Right(newState) =>
               // get child(s). Only those whose edges pass condition.
               // 5. If child node is dependent on multiple node, move to pending-joins queue.
@@ -91,7 +91,9 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
 
               val updatedRuntimeState = newRuntimeState.update(
                 nodesForWorkQueue.map(n => WorkItem(n, newState)),
-                nodesForPendingJoins.map(n => n -> List(JoinInput(nodeName,newState))).toMap
+                nodesForPendingJoins
+                  .map(n => n -> List(JoinInput(nodeName, newState)))
+                  .toMap
               )
               // 7. Start the loop again. Continue till both pending-joins and work-queue are empty.
               execute(
@@ -105,7 +107,10 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
         // Check if Pending Joins.
         case RuntimeState.EmptyWorkQueue if runtimeState.isJoinPending =>
           val finishedJoins =
-            RuntimeState.finishedJoins(runtimeState, stateAcc, graph.edges)
+            RuntimeState.finishedJoins(
+              runtimeState,
+              nodeName => graph.edges.count(_.to == nodeName)
+            )
 
           if (finishedJoins.isEmpty) {
             GraphError.RuntimeError(
@@ -120,7 +125,10 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
               case (runtimeStateAcc, nodeName) =>
                 val joinInputs =
                   runtimeState.pendingJoins(nodeName).runtimeChecked
-                val combinedState = graph.reducer.merge(joinInputs.head.state, joinInputs.tail.map(_.state)*)
+                val combinedState = graph.reducer.merge(
+                  joinInputs.head.state,
+                  joinInputs.tail.map(_.state)*
+                )
                 runtimeStateAcc
                   .copy(
                     workQueue = runtimeStateAcc.workQueue.enqueue(
