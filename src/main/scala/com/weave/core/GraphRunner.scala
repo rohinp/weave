@@ -77,7 +77,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
     ): GraphError.ExecutionError | S = {
       // 4. Pick a node from work-queue, execute,
       runtimeState.dequeue match {
-        case Some(workItem, newRuntimeState) => {
+        case Some(workItem, newRuntimeState) =>
           val result =
             executeNode(graph.nodes(workItem.nodeName), workItem.state, onEvent)
           result match {
@@ -104,7 +104,6 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
                 onEvent
               )
           }
-        }
 
         // Check if Pending Joins.
         case None if runtimeState.isJoinPending =>
