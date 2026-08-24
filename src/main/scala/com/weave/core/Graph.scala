@@ -29,11 +29,11 @@ case class Graph[S, U] private (
       .filter(edge => edge.from == nodeName && edge.condition(state))
       .map(_.to)
 
-  private def countParent(nodeName: String): Int =
-    edges.count(edge => edge.to == nodeName)
+  def parentNodes(nodeName: String): List[String] =
+    edges.collect { case edge if edge.to == nodeName => edge.from }.distinct
 
   def isMultipleParentNode(nodeName: String): Boolean =
-    countParent(nodeName) > 1
+    parentNodes(nodeName).size > 1
 }
 
 object Graph {
@@ -51,7 +51,7 @@ object Graph {
 
   extension [S, U](graph: Graph[S, U])
     def addEdge(edge: Edge[S]): Graph[S, U] =
-      graph.copy(edges = edge :: graph.edges)
+      graph.copy(edges = graph.edges :+ edge)
 
   extension [S, U](graph: Graph[S, U])
     def setStart(nodeName: String): Graph[S, U] =

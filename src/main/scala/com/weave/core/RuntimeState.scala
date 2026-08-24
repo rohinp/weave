@@ -42,17 +42,13 @@ case class RuntimeState[S](
 }
 
 object RuntimeState {
-
-  case object EmptyWorkQueue
-  case object NoneCompletedJoins
-
   // join completion depends on arrivals
   def finishedJoins[S](
       runtimeState: RuntimeState[S],
-      incomingEdgeCount: String => Int
+      expectedParents: String => Set[String]
   ): List[String] =
     runtimeState.pendingJoins.collect {
-      case (nodeName, states) if states.size == incomingEdgeCount(nodeName) =>
+      case (nodeName, states) if states.keySet == expectedParents(nodeName) =>
         nodeName
     }.toList
 

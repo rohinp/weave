@@ -27,7 +27,7 @@ class RuntimeStateSpec extends AnyWordSpecLike with Matchers {
       val finished =
         RuntimeState.finishedJoins(
           runtime,
-          _ => 2
+          _ => Set("branch1", "branch2")
         )
 
       finished shouldBe empty

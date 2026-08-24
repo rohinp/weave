@@ -10,12 +10,13 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
   "Graph Retry policies" must {
     "do not retries a failing node" in {
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
+      val failure = RuntimeException("boom")
 
       val flakyNode =
         createNode(
           "flaky",
           state => {
-            throw RuntimeException("boom")
+            throw failure
           }
         )
 
@@ -31,18 +32,16 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
         onEvent = events += _
       )
 
-      events.toList.toString shouldBe List(
+      events.toList shouldBe List(
         NodeStarted("flaky"),
-        GraphEvent.NodeFailed(
-          "flaky",
-          RuntimeException("boom")
-        ),
-        WorkflowFailed("workflow", RuntimeException("boom"))
-      ).toString
+        GraphEvent.NodeFailed("flaky", failure),
+        WorkflowFailed("workflow", failure)
+      )
     }
     "retries a failing node" in {
       var attempts = 0
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
+      val failure = RuntimeException("boom")
 
       val flakyNode =
         createNode[Int](
@@ -51,7 +50,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
             attempts += 1
 
             if (attempts < 3)
-              throw RuntimeException("boom")
+              throw failure
 
             state + 1
           },
@@ -74,12 +73,12 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
         NodeStarted("flaky"),
         GraphEvent.NodeFailed(
           "flaky",
-          RuntimeException("boom")
+          failure
         ),
         NodeStarted("flaky"),
         GraphEvent.NodeFailed(
           "flaky",
-          RuntimeException("boom")
+          failure
         ),
         NodeStarted("flaky"),
         NodeCompleted("flaky"),
@@ -94,6 +93,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
     "do not retry once succeed" in {
       var attempts = 0
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
+      val failure = RuntimeException("boom")
 
       val flakyNode =
         createNode[Int](
@@ -102,7 +102,7 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
             attempts += 1
 
             if (attempts < 2)
-              throw RuntimeException("boom")
+              throw failure
 
             state + 1
           },
@@ -125,13 +125,44 @@ class GraphRetryPolicySpec extends AnyWordSpecLike with Matchers {
         NodeStarted("flaky"),
         GraphEvent.NodeFailed(
           "flaky",
-          RuntimeException("boom")
+          failure
         ),
         NodeStarted("flaky"),
         NodeCompleted("flaky"),
-        CheckpointCreated("flaky", createState(11)),
+        CheckpointCreated(
+          "flaky",
+          ChatState(List(HumanMessage(10), HumanMessage(11)))
+        ),
         WorkflowCompleted("workflow")
       )
+    }
+
+    "emits one failure event per exhausted attempt" in {
+      val events = collection.mutable.ListBuffer.empty[GraphEvent]
+      val failure = RuntimeException("boom")
+
+      val graph = testGraph
+        .addNode(
+          createNode[Int](
+            "flaky",
+            _ => throw failure,
+            RetryPolicy.FixedAttempts(3)
+          )
+        )
+        .setStart("flaky")
+        .setEnd("flaky")
+        .validate()
+        .runner
+
+      graph.run(createState(10), events += _)
+
+      events.count(_ == NodeStarted("flaky")) shouldBe 3
+      events.count(_ == NodeFailed("flaky", failure)) shouldBe 3
+      events.count(_ == WorkflowFailed("workflow", failure)) shouldBe 1
+      events.count {
+        case WorkflowCompleted(_) => true
+        case _                    => false
+      } shouldBe 0
     }
 
   }

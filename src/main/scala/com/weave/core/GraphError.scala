@@ -17,15 +17,25 @@ object GraphError {
     def message: String = "End node not defined"
   }
 
-  case class RuntimeError(nodeName: String, cause: Throwable) {
+  sealed trait ExecutionError {
+    def cause: Throwable
+    def message: String
+  }
+
+  case class RuntimeError(nodeName: String, cause: Throwable)
+      extends ExecutionError {
     def message: String =
       s"Runtime error in node '$nodeName': ${cause.getMessage}"
   }
 
+  case class JoinDeadlock(pendingJoins: Set[String]) extends ExecutionError {
+    override val cause: Throwable = new RuntimeException(message)
+    override def message: String =
+      s"Workflow cannot progress; pending joins: ${pendingJoins.toList.sorted.mkString(", ")}"
+  }
+
   type ValidationError =
     NodeNotFound | StartNodeNotDefined | EmptyGraph | EndNodeNotDefined
-
-  type ExecutionError = RuntimeError
 
   type Error = ValidationError | ExecutionError
 }
