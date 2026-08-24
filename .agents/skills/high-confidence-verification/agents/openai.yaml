@@ -1,0 +1,8 @@
+interface:
+  display_name: "High-Confidence Verification"
+  short_description: "Risk-based evidence for critical code"
+  default_prompt: "Use $high-confidence-verification to assess this change and propose proportionate verification before adding specialized techniques."
+
+policy:
+  allow_implicit_invocation: false
+

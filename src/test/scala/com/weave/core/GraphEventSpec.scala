@@ -46,12 +46,13 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
 
       val events =
         collection.mutable.ListBuffer.empty[GraphEvent]
+      val failure = RuntimeException("boom")
 
       val graph = testGraph
         .addNode(
           Node(
             "explode",
-            _ => throw RuntimeException("boom")
+            _ => throw failure
           )
         )
         .setStart("explode")
@@ -65,23 +66,18 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
           events += _
         )
 
-      events.toList.toString shouldBe List(
+      events.toList shouldBe List(
         GraphEvent.NodeStarted("explode"),
-        GraphEvent.NodeFailed(
-          "explode",
-          RuntimeException("boom")
-        ),
-        GraphEvent.WorkflowFailed(
-          "workflow",
-          RuntimeException("boom")
-        )
-      ).toString
+        GraphEvent.NodeFailed("explode", failure),
+        GraphEvent.WorkflowFailed("workflow", failure)
+      )
     }
 
     "middle node fails, start node succeeds" in {
 
       val events =
         collection.mutable.ListBuffer.empty[GraphEvent]
+      val failure = RuntimeException("boom")
 
       val graph = testGraph
         .addNode(
@@ -93,7 +89,7 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
         .addNode(
           createNode(
             "explode",
-            _ => throw RuntimeException("boom")
+            _ => throw failure
           )
         )
         .addNode(
@@ -125,11 +121,11 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
         GraphEvent.NodeStarted("explode"),
         GraphEvent.NodeFailed(
           "explode",
-          RuntimeException("boom")
+          failure
         ),
         GraphEvent.WorkflowFailed(
           "workflow",
-          RuntimeException("boom")
+          failure
         )
       )
     }
@@ -158,9 +154,21 @@ class GraphEventSpec extends AnyWordSpecLike with Matchers {
       events.collect { case c: CheckpointCreated[_] =>
         c
       } shouldBe List(
-        CheckpointCreated("a", 11),
-        CheckpointCreated("b", 22)
+        CheckpointCreated(
+          "a",
+          createState(10)
+            .copy(messages = List(HumanMessage(10), HumanMessage(11)))
+        ),
+        CheckpointCreated(
+          "b",
+          ChatState(List(HumanMessage(10), HumanMessage(11), HumanMessage(22)))
+        )
       )
+    }
+
+    "distinguishes event type and payload" in {
+      NodeStarted("node") should not equal NodeCompleted("node")
+      CheckpointCreated("node", 1) should not equal CheckpointCreated("node", 2)
     }
 
   }

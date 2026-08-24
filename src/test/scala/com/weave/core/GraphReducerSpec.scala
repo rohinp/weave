@@ -1,6 +1,11 @@
 package com.weave.core
 
-import com.weave.core.GraphEvent.{CheckpointCreated, NodeCompleted, NodeStarted, WorkflowCompleted}
+import com.weave.core.GraphEvent.{
+  CheckpointCreated,
+  NodeCompleted,
+  NodeStarted,
+  WorkflowCompleted
+}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import TestData.*
@@ -156,12 +161,12 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
         NodeStarted("start"),
         NodeCompleted("start"),
         CheckpointCreated("start", CounterState(5 :: Nil)),
-        NodeStarted("branch2"),
-        NodeCompleted("branch2"),
-        CheckpointCreated("branch2", CounterState(List(5, 25))),
         NodeStarted("branch1"),
         NodeCompleted("branch1"),
-        CheckpointCreated("branch1", CounterState(List(5, 15))),
+        CheckpointCreated("branch1", CounterState(List(15))),
+        NodeStarted("branch2"),
+        NodeCompleted("branch2"),
+        CheckpointCreated("branch2", CounterState(List(25))),
         WorkflowCompleted("workflow")
       )
     }
@@ -506,6 +511,52 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
       "docs",
       "web",
       "merged"
+    )
+  }
+
+  "join merges states in incoming edge order" in {
+    case class State(values: Vector[String])
+    case class Append(value: String)
+
+    val reducer = new Reducer[State, Append] {
+      override def reduce(state: State, update: Append): State =
+        state.copy(values = state.values :+ update.value)
+
+      override def merge(left: State, right: State): State =
+        State(left.values ++ right.values)
+    }
+
+    var stateObservedByMerge: Option[State] = None
+
+    val graph = Graph[State, Append](reducer)
+      .addNode(Node("start", _ => Append("start")))
+      .addNode(Node("docs", _ => Append("docs")))
+      .addNode(Node("web", _ => Append("web")))
+      .addNode(
+        Node(
+          "merge",
+          state => {
+            stateObservedByMerge = Some(state)
+            Append("merged")
+          }
+        )
+      )
+      .setStart("start")
+      .setEnd("merge")
+      .addEdge(Edge("start", "docs"))
+      .addEdge(Edge("start", "web"))
+      .addEdge(Edge("docs", "merge"))
+      .addEdge(Edge("web", "merge"))
+      .validate()
+      .runner
+
+    graph.run(State(Vector.empty)).state
+
+    stateObservedByMerge.value.values shouldBe Vector(
+      "start",
+      "docs",
+      "start",
+      "web"
     )
   }
 }

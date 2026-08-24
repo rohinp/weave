@@ -1,0 +1,4 @@
+interface:
+  display_name: "Pragmatic Developer"
+  short_description: "Simple, surgical, and verifiable engineering"
+  default_prompt: "Use $pragmatic-developer to solve this with explicit assumptions, minimal scope, pragmatic design, and evidence from tests or checks."

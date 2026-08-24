@@ -2,10 +2,6 @@ package com.weave.core
 
 sealed trait GraphEvent {
   val name: String
-  override def equals(obj: Any): Boolean = obj match {
-    case event: GraphEvent => this.name == event.name
-    case _                 => false
-  }
 }
 
 object GraphEvent {

@@ -75,6 +75,11 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
         stateAcc: GraphState[S],
         onEvent: GraphEvent => Unit
     ): GraphError.ExecutionError | S = {
+      def fail(error: GraphError.ExecutionError): GraphError.ExecutionError = {
+        onEvent(GraphEvent.WorkflowFailed("workflow", error.cause))
+        error
+      }
+
       // 4. Pick a node from work-queue, execute,
       runtimeState.dequeue match {
         case Some(workItem, newRuntimeState) =>
@@ -86,8 +91,11 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
               // get child(s). Only those whose edges pass condition.
               // 5. If child node is dependent on multiple node, move to pending-joins queue.
               // 6. If child node not dependent then add to work-queue.
-              val (nodesForPendingJoins, nodesForWorkQueue) = graph
-                .nextNodes(workItem.nodeName, newState)
+              val nextNodes =
+                if (graph.end.contains(workItem.nodeName)) List.empty
+                else graph.nextNodes(workItem.nodeName, newState)
+
+              val (nodesForPendingJoins, nodesForWorkQueue) = nextNodes
                 .partition(graph.isMultipleParentNode)
 
               val updatedRuntimeState = newRuntimeState
@@ -110,22 +118,17 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
           val finishedJoins =
             RuntimeState.finishedJoins(
               runtimeState,
-              nodeName => graph.edges.count(_.to == nodeName)
+              nodeName => graph.parentNodes(nodeName).toSet
             )
 
           if (finishedJoins.isEmpty) {
-            GraphError.RuntimeError(
-              "empty work queue",
-              new RuntimeException(
-                "Empty work queue and pending joins unfinished, this must not happen as it passed validation."
-              )
-            )
+            fail(GraphError.JoinDeadlock(runtimeState.pendingJoins.keySet))
           } else {
             // If all parent processed move to work-queue
             val newRuntimeState = finishedJoins.foldLeft(runtimeState) {
               case (runtimeStateAcc, nodeName) =>
-                val joinInputs =
-                  runtimeState.pendingJoins(nodeName).values.toList
+                val arrivals = runtimeState.pendingJoins(nodeName)
+                val joinInputs = graph.parentNodes(nodeName).map(arrivals)
                 val combinedState = graph.reducer.merge(
                   joinInputs.head,
                   joinInputs.tail*
@@ -145,10 +148,12 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
           graph.end.flatMap(stateAcc.get) match {
             case Some(resultState) => resultState
             case None              =>
-              GraphError.RuntimeError(
-                "empty work queue",
-                new RuntimeException(
-                  "Empty work queue, this must not happen as it passed validation."
+              fail(
+                GraphError.RuntimeError(
+                  "empty work queue",
+                  new RuntimeException(
+                    "Workflow completed without executing the configured end node."
+                  )
                 )
               )
           }
@@ -163,7 +168,7 @@ private[core] class GraphRunner[S, U](graph: Graph[S, U]) {
       onEvent
     )
       .tap {
-        case _: GraphError.RuntimeError => ()
+        case _: GraphError.ExecutionError => ()
         case _ => onEvent(GraphEvent.WorkflowCompleted("workflow"))
       }
   }

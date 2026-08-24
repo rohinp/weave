@@ -11,8 +11,8 @@ object TestData {
 
   extension [S](result: GraphError.ExecutionError | S)
     def state: S = result match {
-      case error: GraphError.RuntimeError => fail(error.toString)
-      case value                          => value.asInstanceOf[S]
+      case error: GraphError.ExecutionError => fail(error.toString)
+      case value                            => value.asInstanceOf[S]
     }
 
   private def fail(message: String): Nothing =
