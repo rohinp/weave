@@ -27,6 +27,8 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers {
     }
 
     "stops execution at end node" in {
+      val events = collection.mutable.ListBuffer.empty[GraphEvent]
+
       val graph =
         testGraph
           .addNode(createNode[Int]("a", _ + 1))
@@ -37,12 +39,19 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers {
           .addEdge(Edge("a", "b"))
           .addEdge(Edge("b", "c"))
 
-      val result =
+      val result = {
         graph
           .validate()
           .runner
-          .run(createState(10))
+          .run(createState(10), onEvent = events += _)
+      }
 
+      // As of now we execute all nodes, but while returning final state its only the end node.
+      events.collect { case GraphEvent.NodeStarted(name) =>
+        name
+      } shouldBe List("a", "b", "c")
+
+      // this is end state result node b, although c is also executed
       result.state shouldBe ChatState(
         List(HumanMessage(10), HumanMessage(11), HumanMessage(22))
       )
@@ -67,7 +76,7 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers {
     /*
      * TODO: This one fails need a fix, not handled a situation where conditions are applied on edges.
      * */
-    "routes based on state" ignore {
+    "routes based on state" in {
       val events = collection.mutable.ListBuffer.empty[GraphEvent]
 
       val graph =
@@ -88,6 +97,22 @@ class GraphRunnerSpec extends AnyWordSpecLike with Matchers {
       result.state shouldBe ChatState(
         List(HumanMessage(5), HumanMessage(5), HumanMessage(50))
       )
+    }
+
+    "released join executes only once and does not remain pending" in {
+      val events = collection.mutable.ListBuffer.empty[GraphEvent]
+
+      // Build normal diamond graph and run.
+
+      events.count {
+        case GraphEvent.NodeStarted("merge") => true
+        case _                               => false
+      } shouldBe 1
+
+      events.count {
+        case GraphEvent.NodeCompleted("merge") => true
+        case _                                 => false
+      } shouldBe 1
     }
 
   }

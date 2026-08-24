@@ -1,14 +1,10 @@
 package com.weave.core
 
-import com.weave.core.GraphEvent.{
-  CheckpointCreated,
-  NodeCompleted,
-  NodeStarted,
-  WorkflowCompleted
-}
+import com.weave.core.GraphEvent.{CheckpointCreated, NodeCompleted, NodeStarted, WorkflowCompleted}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 import TestData.*
+import org.scalatest.OptionValues.convertOptionToValuable
 
 class GraphReducerSpec extends AnyWordSpecLike with Matchers {
 
@@ -373,56 +369,143 @@ class GraphReducerSpec extends AnyWordSpecLike with Matchers {
         )
         .state
 
-      val mergeCount = events.count {
-        case NodeStarted("merge") => true
-        case _                    => false
+      val startedNodes = events.collect { case NodeStarted(name) =>
+        name
       }
-      println(s"Merge node executed $mergeCount times")
-      println(s"Events: ${events.toList}")
-      mergeCount shouldBe 1
+
+      startedNodes.toSet shouldBe Set(
+        "start",
+        "branch1",
+        "branch2",
+        "merge"
+      )
     }
-    /*"merges states from two branches" in {
+
+    "join starts only after all parents complete" in {
+      val events = collection.mutable.ListBuffer.empty[GraphEvent]
+
+      case class CounterState(value: List[Int])
+
+      sealed trait CounterUpdate
+      case class Increment(by: Int) extends CounterUpdate
+
+      val reducer =
+        new Reducer[CounterState, CounterUpdate] {
+          override def reduce(
+              state: CounterState,
+              update: CounterUpdate
+          ): CounterState =
+            update match {
+              case Increment(by) =>
+                state.value match {
+                  case Nil          => CounterState(List(by))
+                  case head :: tail => CounterState((head + by) :: tail)
+                }
+            }
+
+          override def merge(
+              left: CounterState,
+              right: CounterState
+          ): CounterState =
+            CounterState(left.value ++ right.value)
+        }
 
       val graph =
-        testGraph
-          .addNode(
-            createNode(name = "start", f = identity)
-          )
-
-          .addNode(
-            createNode(name = "docs", f = _ => AppendMessage("doc answer"))
-          )
-
-          .addNode(
-            createNode(name = "web", f = _ => AppendMessage("web answer"))
-          )
-
-          .addNode(
-            createNode(name = "merge", f = identity)
-          )
-
+        Graph[CounterState, CounterUpdate](reducer)
+          .addNode(Node("start", _ => Increment(5)))
+          .addNode(Node("branch1", _ => Increment(10)))
+          .addNode(Node("branch2", _ => Increment(20)))
+          .addNode(Node("merge", _ => Increment(4)))
           .setStart("start")
           .setEnd("merge")
-
-          .addEdge(Edge("start", "docs"))
-          .addEdge(Edge("start", "web"))
-
-          .addEdge(Edge("docs", "merge"))
-          .addEdge(Edge("web", "merge"))
-
+          .addEdge(Edge("start", "branch1"))
+          .addEdge(Edge("start", "branch2"))
+          .addEdge(Edge("branch1", "merge"))
+          .addEdge(Edge("branch2", "merge"))
           .validate()
-          .value
+          .runner
 
-      val result =
-        graph.run(
-          createState("question")
+      graph
+        .run(
+          CounterState(0 :: Nil),
+          onEvent = events += _
         )
+        .state
 
-      result.value.messages should contain allOf(
-        "question",
-        "doc answer",
-        "web answer"
-      )
-    }*/
+      val eventList = events.toList
+
+      val branch1Completed =
+        eventList.indexOf(NodeCompleted("branch1"))
+
+      val branch2Completed =
+        eventList.indexOf(NodeCompleted("branch2"))
+
+      val mergeStarted =
+        eventList.indexOf(NodeStarted("merge"))
+
+      branch1Completed should be >= 0
+      branch2Completed should be >= 0
+      mergeStarted should be > branch1Completed
+      mergeStarted should be > branch2Completed
+    }
+
+  }
+
+  "join receives merged states from both branches" in {
+    case class State(values: Vector[String])
+
+    sealed trait Update
+    case class Append(value: String) extends Update
+
+    val reducer = new Reducer[State, Update] {
+      override def reduce(state: State, update: Update): State =
+        update match {
+          case Append(value) =>
+            state.copy(values = state.values :+ value)
+        }
+
+      override def merge(left: State, right: State): State =
+        State((left.values ++ right.values).distinct)
+    }
+
+    var stateObservedByMerge: Option[State] = None
+
+    val graph =
+      Graph[State, Update](reducer)
+        .addNode(Node("start", _ => Append("start")))
+        .addNode(Node("docs", _ => Append("docs")))
+        .addNode(Node("web", _ => Append("web")))
+        .addNode(
+          Node(
+            "merge",
+            state => {
+              stateObservedByMerge = Some(state)
+              Append("merged")
+            }
+          )
+        )
+        .setStart("start")
+        .setEnd("merge")
+        .addEdge(Edge("start", "docs"))
+        .addEdge(Edge("start", "web"))
+        .addEdge(Edge("docs", "merge"))
+        .addEdge(Edge("web", "merge"))
+        .validate()
+        .runner
+
+    val result = graph.run(State(Vector.empty))
+
+    stateObservedByMerge.value.values.toSet shouldBe Set(
+      "start",
+      "docs",
+      "web"
+    )
+
+    result.state.values.toSet shouldBe Set(
+      "start",
+      "docs",
+      "web",
+      "merged"
+    )
   }
 }
