@@ -20,6 +20,12 @@ The project explores concepts behind:
 * tool invocation
 * human-in-the-loop systems
 
+## Kotlin reference implementation
+
+A parallel Kotlin/JVM implementation is being developed in
+[`kotlin-reference`](kotlin-reference/README.md). It is intentionally isolated
+from the Scala build while behavior is ported and verified incrementally.
+
 The implementation is intentionally built incrementally and test-first to deeply understand the architecture behind systems such as:
 
 * LangGraph
