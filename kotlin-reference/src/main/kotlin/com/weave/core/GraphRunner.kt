@@ -5,27 +5,64 @@ public class GraphRunner<S, U> internal constructor(private val graph: Graph<S, 
         initialState: S,
         onEvent: (GraphEvent) -> Unit = {},
     ): RunResult<S> {
-        var nodeName = requireNotNull(graph.start)
-        var state = initialState
+        val endNode = requireNotNull(graph.end)
+        val runtimeState =
+            RuntimeState(
+                workQueue = ArrayDeque(listOf(WorkItem(requireNotNull(graph.start), initialState))),
+            )
+        val completedStates = mutableMapOf<String, S>()
 
         while (true) {
-            val node = requireNotNull(graph.nodes[nodeName])
-            val execution = executeNode(node, state, onEvent)
-            state = execution.getOrElse { cause ->
-                return fail(ExecutionError.RuntimeError(nodeName, cause), onEvent)
+            val workItem = runtimeState.dequeue()
+            if (workItem != null) {
+                val node = requireNotNull(graph.nodes[workItem.nodeName])
+                val execution = executeNode(node, workItem.state, onEvent)
+                val nextState = execution.getOrElse { cause ->
+                    return fail(ExecutionError.RuntimeError(workItem.nodeName, cause), onEvent)
+                }
+
+                completedStates[workItem.nodeName] = nextState
+
+                val children =
+                    if (workItem.nodeName == endNode) {
+                        emptyList()
+                    } else {
+                        graph.nextNodes(workItem.nodeName, nextState)
+                    }
+                val (joinNodes, readyNodes) = children.partition(graph::isMultipleParentNode)
+
+                runtimeState.enqueue(readyNodes.map { nodeName -> WorkItem(nodeName, nextState) })
+                runtimeState.addJoinArrivals(
+                    joinNodes.map { joinNode ->
+                        PendingJoinInput(joinNode, workItem.nodeName, nextState)
+                    },
+                )
+                continue
             }
 
-            if (nodeName == graph.end) {
-                onEvent(GraphEvent.WorkflowCompleted(WORKFLOW_NAME))
-                return RunResult.Success(state)
+            if (runtimeState.hasPendingJoins) {
+                val finishedJoins =
+                    runtimeState.finishedJoins { nodeName -> graph.parentNodes(nodeName).toSet() }
+                if (finishedJoins.isEmpty()) {
+                    return fail(ExecutionError.JoinDeadlock(runtimeState.pendingJoins.keys.toSet()), onEvent)
+                }
+
+                finishedJoins.forEach { nodeName ->
+                    val arrivals = requireNotNull(runtimeState.pendingJoins.remove(nodeName))
+                    val orderedStates = graph.parentNodes(nodeName).map(arrivals::getValue)
+                    val combinedState =
+                        orderedStates.drop(1).fold(orderedStates.first(), graph.reducer::merge)
+                    runtimeState.enqueue(listOf(WorkItem(nodeName, combinedState)))
+                }
+                continue
             }
 
-            val children = graph.nextNodes(nodeName, state)
-            when (children.size) {
-                0 -> return fail(ExecutionError.EndNodeNotReached(requireNotNull(graph.end)), onEvent)
-                1 -> nodeName = children.single()
-                else -> return fail(ExecutionError.BranchingNotSupported(nodeName), onEvent)
+            if (endNode !in completedStates) {
+                return fail(ExecutionError.EndNodeNotReached(endNode), onEvent)
             }
+
+            onEvent(GraphEvent.WorkflowCompleted(WORKFLOW_NAME))
+            return RunResult.Success(completedStates.getValue(endNode))
         }
     }
 

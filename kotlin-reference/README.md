@@ -13,11 +13,12 @@ truth and equivalent Kotlin scenarios are added incrementally.
 - basic graph validation
 - explicit validation and execution results
 - retry policy and lifecycle event contracts
-- synchronous linear execution with reducer-based updates
-- callback events and fixed-attempt retries for linear execution
-- explicit failure when branching reaches the not-yet-ported scheduler boundary
+- FIFO ready queue with branch-local state
+- strict parent-identity joins with deterministic state merge order
+- typed join deadlocks
+- callback events and fixed-attempt retries
 
-Strict fan-out and join scheduling will be ported in subsequent vertical slices.
+Conditional convergence remains outside the current strict-join milestone.
 
 ## Run tests
 

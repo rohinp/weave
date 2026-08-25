@@ -87,7 +87,8 @@ class GraphReferenceTest {
     }
 
     @Test
-    fun `reports the scheduler boundary when a node fans out`() {
+    fun `processes fan out in FIFO edge order`() {
+        val events = mutableListOf<GraphEvent>()
         val validation =
             Graph.create(reducer)
                 .addNode(Node("start") { Append(1) })
@@ -100,9 +101,13 @@ class GraphReferenceTest {
                 .validate()
 
         val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
-        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList())))
+        val result = assertIs<RunResult.Success<State>>(runner.run(State(emptyList()), events::add))
 
-        assertEquals(ExecutionError.BranchingNotSupported("start"), result.error)
+        assertEquals(State(listOf(1, 2)), result.state)
+        assertEquals(
+            listOf("start", "left", "right"),
+            events.filterIsInstance<GraphEvent.NodeStarted>().map { it.name },
+        )
     }
 
     @Test

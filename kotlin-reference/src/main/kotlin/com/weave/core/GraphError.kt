@@ -42,9 +42,4 @@ public sealed interface ExecutionError {
         override val message: String = "Workflow completed without executing end node '$endNode'"
         override val cause: Throwable = IllegalStateException(message)
     }
-
-    public data class BranchingNotSupported(public val nodeName: String) : ExecutionError {
-        override val message: String = "Branching scheduler not yet ported at node '$nodeName'"
-        override val cause: Throwable = UnsupportedOperationException(message)
-    }
 }
