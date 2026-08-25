@@ -38,10 +38,15 @@ public data class Graph<S, U> private constructor(
         return ValidationResult.Valid(GraphRunner(this))
     }
 
-    internal fun matchingChildren(
+    public fun nextNodes(
         nodeName: String,
         state: S,
     ): List<String> = edges.filter { it.from == nodeName && it.condition(state) }.map { it.to }
+
+    public fun parentNodes(nodeName: String): List<String> =
+        edges.filter { it.to == nodeName }.map { it.from }.distinct()
+
+    public fun isMultipleParentNode(nodeName: String): Boolean = parentNodes(nodeName).size > 1
 
     public companion object {
         public fun <S, U> create(reducer: Reducer<S, U>): Graph<S, U> =

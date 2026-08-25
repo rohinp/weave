@@ -21,6 +21,7 @@ class GraphReferenceTest {
 
     @Test
     fun `runs a validated linear graph from start to end`() {
+        val events = mutableListOf<GraphEvent>()
         val validation =
             Graph.create(reducer)
                 .addNode(Node("increment") { state -> Append(state.values.last() + 1) })
@@ -31,9 +32,21 @@ class GraphReferenceTest {
                 .validate()
 
         val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
-        val result = assertIs<RunResult.Success<State>>(runner.run(State(listOf(10))))
+        val result = assertIs<RunResult.Success<State>>(runner.run(State(listOf(10)), events::add))
 
         assertEquals(State(listOf(10, 11, 22)), result.state)
+        assertEquals(
+            listOf(
+                GraphEvent.NodeStarted("increment"),
+                GraphEvent.NodeCompleted("increment"),
+                GraphEvent.CheckpointCreated("increment", State(listOf(10, 11))),
+                GraphEvent.NodeStarted("double"),
+                GraphEvent.NodeCompleted("double"),
+                GraphEvent.CheckpointCreated("double", State(listOf(10, 11, 22))),
+                GraphEvent.WorkflowCompleted("workflow"),
+            ),
+            events,
+        )
     }
 
     @Test
@@ -49,6 +62,7 @@ class GraphReferenceTest {
     @Test
     fun `returns node failures instead of throwing`() {
         val failure = IllegalStateException("boom")
+        val events = mutableListOf<GraphEvent>()
         val validation =
             Graph.create(reducer)
                 .addNode(Node("explode") { _: State -> throw failure })
@@ -57,11 +71,19 @@ class GraphReferenceTest {
                 .validate()
 
         val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
-        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList())))
-        val error = assertIs<ExecutionError.NodeFailed>(result.error)
+        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList()), events::add))
+        val error = assertIs<ExecutionError.RuntimeError>(result.error)
 
         assertEquals("explode", error.nodeName)
         assertSame(failure, error.cause)
+        assertEquals(
+            listOf(
+                GraphEvent.NodeStarted("explode"),
+                GraphEvent.NodeFailed("explode", failure),
+                GraphEvent.WorkflowFailed("workflow", failure),
+            ),
+            events,
+        )
     }
 
     @Test
@@ -81,5 +103,63 @@ class GraphReferenceTest {
         val result = assertIs<RunResult.Failure>(runner.run(State(emptyList())))
 
         assertEquals(ExecutionError.BranchingNotSupported("start"), result.error)
+    }
+
+    @Test
+    fun `retries until a node succeeds`() {
+        var attempts = 0
+        val failure = IllegalStateException("not yet")
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(
+                    Node(
+                        name = "flaky",
+                        action = {
+                            attempts += 1
+                            if (attempts < 3) throw failure
+                            Append(1)
+                        },
+                        retryPolicy = RetryPolicy.FixedAttempts(3),
+                    ),
+                )
+                .setStart("flaky")
+                .setEnd("flaky")
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Success<State>>(runner.run(State(emptyList()), events::add))
+
+        assertEquals(State(listOf(1)), result.state)
+        assertEquals(3, events.count { it == GraphEvent.NodeStarted("flaky") })
+        assertEquals(2, events.count { it == GraphEvent.NodeFailed("flaky", failure) })
+        assertEquals(1, events.count { it == GraphEvent.WorkflowCompleted("workflow") })
+    }
+
+    @Test
+    fun `reports one workflow failure after retries are exhausted`() {
+        val failure = IllegalStateException("always fails")
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(
+                    Node(
+                        name = "flaky",
+                        retryPolicy = RetryPolicy.FixedAttempts(3),
+                        action = { throw failure },
+                    ),
+                )
+                .setStart("flaky")
+                .setEnd("flaky")
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList()), events::add))
+
+        assertEquals(ExecutionError.RuntimeError("flaky", failure), result.error)
+        assertEquals(3, events.count { it == GraphEvent.NodeStarted("flaky") })
+        assertEquals(3, events.count { it == GraphEvent.NodeFailed("flaky", failure) })
+        assertEquals(1, events.count { it == GraphEvent.WorkflowFailed("workflow", failure) })
+        assertEquals(0, events.count { it is GraphEvent.WorkflowCompleted })
     }
 }

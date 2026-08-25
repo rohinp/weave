@@ -12,11 +12,12 @@ truth and equivalent Kotlin scenarios are added incrementally.
 - immutable graph definitions
 - basic graph validation
 - explicit validation and execution results
+- retry policy and lifecycle event contracts
 - synchronous linear execution with reducer-based updates
+- callback events and fixed-attempt retries for linear execution
 - explicit failure when branching reaches the not-yet-ported scheduler boundary
 
-Strict fan-out and join scheduling, retries, and runtime events will be ported
-in subsequent vertical slices.
+Strict fan-out and join scheduling will be ported in subsequent vertical slices.
 
 ## Run tests
 
