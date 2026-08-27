@@ -141,6 +141,37 @@ class GraphSchedulerTest {
     }
 
     @Test
+    fun `returns merge failures as runtime errors owned by the join node`() {
+        val failure = IllegalStateException("merge failed")
+        val failingReducer =
+            object : Reducer<State, Append> {
+                override fun reduce(state: State, update: Append): State =
+                    state.copy(values = state.values + update.value)
+
+                override fun merge(left: State, right: State): State = throw failure
+            }
+        val events = mutableListOf<GraphEvent>()
+        val graph =
+            Graph.create(failingReducer)
+                .addNode(Node("start") { Append("start") })
+                .addNode(Node("left") { Append("left") })
+                .addNode(Node("right") { Append("right") })
+                .addNode(Node("merge") { Append("merged") })
+                .setStart("start")
+                .setEnd("merge")
+                .addEdge(Edge("start", "left"))
+                .addEdge(Edge("start", "right"))
+                .addEdge(Edge("left", "merge"))
+                .addEdge(Edge("right", "merge"))
+
+        val result = assertIs<RunResult.Failure>(runner(graph).run(State(emptyList()), events::add))
+
+        assertEquals(ExecutionError.RuntimeError("merge", failure), result.error)
+        assertEquals(0, events.count { it == GraphEvent.NodeStarted("merge") })
+        assertEquals(GraphEvent.WorkflowFailed("workflow", failure), events.last())
+    }
+
+    @Test
     fun `strict join supports three ordered parents`() {
         var mergeInput: State? = null
         val graph =

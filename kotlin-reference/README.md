@@ -20,6 +20,22 @@ truth and equivalent Kotlin scenarios are added incrementally.
 
 Conditional convergence remains outside the current strict-join milestone.
 
+## API contracts
+
+- Validation and execution use sealed `ValidationResult` and `RunResult` values;
+  expected workflow failures are not thrown.
+- `FixedAttempts(maxAttempts)` counts the initial execution as an attempt and
+  stops immediately after the first success.
+- Failing to reach the configured end node returns the typed
+  `ExecutionError.EndNodeNotReached` result.
+- Node actions, state reduction, routing predicates, and branch-state merging
+  are workflow computation. Their exceptions become `RunResult.Failure` and
+  emit `WorkflowFailed`.
+- Event callbacks are observers. Callback exceptions escape unchanged and are
+  never retried or converted into workflow failures.
+- `Graph.toString()` is diagnostic output only and has no stable formatting
+  contract.
+
 ## Run tests
 
 ```shell

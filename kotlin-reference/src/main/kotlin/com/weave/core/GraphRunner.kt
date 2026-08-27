@@ -1,6 +1,15 @@
 package com.weave.core
 
+/** Executes a validated graph synchronously. */
 public class GraphRunner<S, U> internal constructor(private val graph: Graph<S, U>) {
+    /**
+     * Executes the workflow and returns an explicit success or workflow failure.
+     *
+     * Exceptions raised by node actions, state reduction, routing predicates, and
+     * branch-state merging become [RunResult.Failure]. Exceptions raised by
+     * [onEvent] escape unchanged because the callback is an observer, not part of
+     * workflow computation.
+     */
     public fun run(
         initialState: S,
         onEvent: (GraphEvent) -> Unit = {},
@@ -23,12 +32,17 @@ public class GraphRunner<S, U> internal constructor(private val graph: Graph<S, 
 
                 completedStates[workItem.nodeName] = nextState
 
-                val children =
-                    if (workItem.nodeName == endNode) {
-                        emptyList()
-                    } else {
-                        graph.nextNodes(workItem.nodeName, nextState)
+                val childrenResult =
+                    runCatching {
+                        if (workItem.nodeName == endNode) {
+                            emptyList()
+                        } else {
+                            graph.nextNodes(workItem.nodeName, nextState)
+                        }
                     }
+                val children = childrenResult.getOrElse { cause ->
+                    return fail(ExecutionError.RuntimeError(workItem.nodeName, cause), onEvent)
+                }
                 val (joinNodes, readyNodes) = children.partition(graph::isMultipleParentNode)
 
                 runtimeState.enqueue(readyNodes.map { nodeName -> WorkItem(nodeName, nextState) })
@@ -47,11 +61,16 @@ public class GraphRunner<S, U> internal constructor(private val graph: Graph<S, 
                     return fail(ExecutionError.JoinDeadlock(runtimeState.pendingJoins.keys.toSet()), onEvent)
                 }
 
-                finishedJoins.forEach { nodeName ->
+                for (nodeName in finishedJoins) {
                     val arrivals = requireNotNull(runtimeState.pendingJoins.remove(nodeName))
-                    val orderedStates = graph.parentNodes(nodeName).map(arrivals::getValue)
-                    val combinedState =
-                        orderedStates.drop(1).fold(orderedStates.first(), graph.reducer::merge)
+                    val combinedStateResult =
+                        runCatching {
+                            val orderedStates = graph.parentNodes(nodeName).map(arrivals::getValue)
+                            orderedStates.drop(1).fold(orderedStates.first(), graph.reducer::merge)
+                        }
+                    val combinedState = combinedStateResult.getOrElse { cause ->
+                        return fail(ExecutionError.RuntimeError(nodeName, cause), onEvent)
+                    }
                     runtimeState.enqueue(listOf(WorkItem(nodeName, combinedState)))
                 }
                 continue

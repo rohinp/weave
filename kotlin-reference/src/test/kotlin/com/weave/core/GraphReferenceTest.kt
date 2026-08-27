@@ -2,6 +2,7 @@ package com.weave.core
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertSame
 
@@ -96,6 +97,45 @@ class GraphReferenceTest {
             listOf("start", "large"),
             events.filterIsInstance<GraphEvent.NodeStarted>().map { it.name },
         )
+    }
+
+    @Test
+    fun `returns a typed error when the end node is not reached`() {
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(Node("start") { Append(1) })
+                .addNode(Node("end") { Append(2) })
+                .setStart("start")
+                .setEnd("end")
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList()), events::add))
+        val error = assertIs<ExecutionError.EndNodeNotReached>(result.error)
+
+        assertEquals("end", error.endNode)
+        assertEquals(listOf(GraphEvent.WorkflowFailed("workflow", error.cause)), events.takeLast(1))
+    }
+
+    @Test
+    fun `returns routing predicate failures as runtime errors`() {
+        val failure = IllegalStateException("routing failed")
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(Node("start") { Append(1) })
+                .addNode(Node("end") { Append(2) })
+                .setStart("start")
+                .setEnd("end")
+                .addEdge(Edge("start", "end") { throw failure })
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList()), events::add))
+
+        assertEquals(ExecutionError.RuntimeError("start", failure), result.error)
+        assertEquals(GraphEvent.WorkflowFailed("workflow", failure), events.last())
     }
 
     @Test
@@ -275,5 +315,43 @@ class GraphReferenceTest {
         assertEquals(1, events.count { it == GraphEvent.NodeStarted("never") })
         assertEquals(1, events.count { it == GraphEvent.NodeFailed("never", failure) })
         assertEquals(1, events.count { it == GraphEvent.WorkflowFailed("workflow", failure) })
+    }
+
+    @Test
+    fun `event callback failures escape unchanged and are not retried`() {
+        var attempts = 0
+        val callbackFailure = IllegalStateException("observer failed")
+        val observedEvents = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(
+                    Node(
+                        name = "only",
+                        retryPolicy = RetryPolicy.FixedAttempts(3),
+                        action = {
+                            attempts += 1
+                            Append(1)
+                        },
+                    ),
+                )
+                .setStart("only")
+                .setEnd("only")
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val thrown =
+            assertFailsWith<IllegalStateException> {
+                runner.run(State(emptyList())) { event ->
+                    observedEvents += event
+                    if (event is GraphEvent.NodeCompleted) throw callbackFailure
+                }
+            }
+
+        assertSame(callbackFailure, thrown)
+        assertEquals(1, attempts)
+        assertEquals(
+            listOf(GraphEvent.NodeStarted("only"), GraphEvent.NodeCompleted("only")),
+            observedEvents,
+        )
     }
 }

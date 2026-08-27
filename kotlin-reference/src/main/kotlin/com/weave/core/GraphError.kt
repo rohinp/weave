@@ -1,5 +1,6 @@
 package com.weave.core
 
+/** A graph-definition error discovered before execution. */
 public sealed interface ValidationError {
     public val message: String
 
@@ -20,6 +21,7 @@ public sealed interface ValidationError {
     }
 }
 
+/** A workflow-owned failure represented by [RunResult.Failure]. */
 public sealed interface ExecutionError {
     public val cause: Throwable
 
