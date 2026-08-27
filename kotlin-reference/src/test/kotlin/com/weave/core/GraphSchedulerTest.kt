@@ -102,10 +102,42 @@ class GraphSchedulerTest {
         assertEquals(State(listOf("start", "docs", "start", "web")), mergeInput)
         assertEquals(State(listOf("start", "docs", "start", "web", "merged")), result.state)
         assertEquals(1, events.count { it == GraphEvent.NodeStarted("merge") })
+        assertEquals(1, events.count { it == GraphEvent.WorkflowCompleted("workflow") })
 
         val mergeStarted = events.indexOf(GraphEvent.NodeStarted("merge"))
         assertEquals(true, mergeStarted > events.indexOf(GraphEvent.NodeCompleted("docs")))
         assertEquals(true, mergeStarted > events.indexOf(GraphEvent.NodeCompleted("web")))
+    }
+
+    @Test
+    fun `released join schedules downstream work`() {
+        val events = mutableListOf<GraphEvent>()
+        val graph =
+            Graph.create(reducer)
+                .addNode(Node("start") { Append("start") })
+                .addNode(Node("docs") { Append("docs") })
+                .addNode(Node("web") { Append("web") })
+                .addNode(Node("merge") { Append("merged") })
+                .addNode(Node("final") { Append("final") })
+                .setStart("start")
+                .setEnd("final")
+                .addEdge(Edge("start", "docs"))
+                .addEdge(Edge("start", "web"))
+                .addEdge(Edge("docs", "merge"))
+                .addEdge(Edge("web", "merge"))
+                .addEdge(Edge("merge", "final"))
+
+        val result = assertIs<RunResult.Success<State>>(runner(graph).run(State(emptyList()), events::add))
+
+        assertEquals(
+            State(listOf("start", "docs", "start", "web", "merged", "final")),
+            result.state,
+        )
+        assertEquals(
+            listOf("start", "docs", "web", "merge", "final"),
+            events.filterIsInstance<GraphEvent.NodeStarted>().map { it.name },
+        )
+        assertEquals(1, events.count { it == GraphEvent.WorkflowCompleted("workflow") })
     }
 
     @Test

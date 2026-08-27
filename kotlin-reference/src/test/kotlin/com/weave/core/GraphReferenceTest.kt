@@ -50,6 +50,55 @@ class GraphReferenceTest {
     }
 
     @Test
+    fun `returns a successful result when start and end are the same node`() {
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(Node("only") { Append(11) })
+                .setStart("only")
+                .setEnd("only")
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Success<State>>(runner.run(State(listOf(10)), events::add))
+
+        assertEquals(State(listOf(10, 11)), result.state)
+        assertEquals(
+            listOf(
+                GraphEvent.NodeStarted("only"),
+                GraphEvent.NodeCompleted("only"),
+                GraphEvent.CheckpointCreated("only", State(listOf(10, 11))),
+                GraphEvent.WorkflowCompleted("workflow"),
+            ),
+            events,
+        )
+    }
+
+    @Test
+    fun `routes using state produced by the reducer`() {
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(Node("start") { Append(10) })
+                .addNode(Node("small") { Append(20) })
+                .addNode(Node("large") { Append(100) })
+                .setStart("start")
+                .setEnd("large")
+                .addEdge(Edge("start", "small") { state -> state.values.last() < 10 })
+                .addEdge(Edge("start", "large") { state -> state.values.last() >= 10 })
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Success<State>>(runner.run(State(listOf(5)), events::add))
+
+        assertEquals(State(listOf(5, 10, 100)), result.state)
+        assertEquals(
+            listOf("start", "large"),
+            events.filterIsInstance<GraphEvent.NodeStarted>().map { it.name },
+        )
+    }
+
+    @Test
     fun `returns a typed validation error`() {
         val result = Graph.create(reducer).validate()
 
@@ -78,6 +127,38 @@ class GraphReferenceTest {
         assertSame(failure, error.cause)
         assertEquals(
             listOf(
+                GraphEvent.NodeStarted("explode"),
+                GraphEvent.NodeFailed("explode", failure),
+                GraphEvent.WorkflowFailed("workflow", failure),
+            ),
+            events,
+        )
+    }
+
+    @Test
+    fun `preserves successful events before a middle node fails`() {
+        val failure = IllegalStateException("middle failed")
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(Node("start") { Append(1) })
+                .addNode(Node("explode") { _: State -> throw failure })
+                .addNode(Node("end") { Append(3) })
+                .setStart("start")
+                .setEnd("end")
+                .addEdge(Edge("start", "explode"))
+                .addEdge(Edge("explode", "end"))
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList()), events::add))
+
+        assertEquals(ExecutionError.RuntimeError("explode", failure), result.error)
+        assertEquals(
+            listOf(
+                GraphEvent.NodeStarted("start"),
+                GraphEvent.NodeCompleted("start"),
+                GraphEvent.CheckpointCreated("start", State(listOf(1))),
                 GraphEvent.NodeStarted("explode"),
                 GraphEvent.NodeFailed("explode", failure),
                 GraphEvent.WorkflowFailed("workflow", failure),
@@ -125,7 +206,7 @@ class GraphReferenceTest {
                             if (attempts < 3) throw failure
                             Append(1)
                         },
-                        retryPolicy = RetryPolicy.FixedAttempts(3),
+                        retryPolicy = RetryPolicy.FixedAttempts(4),
                     ),
                 )
                 .setStart("flaky")
@@ -136,6 +217,7 @@ class GraphReferenceTest {
         val result = assertIs<RunResult.Success<State>>(runner.run(State(emptyList()), events::add))
 
         assertEquals(State(listOf(1)), result.state)
+        assertEquals(3, attempts)
         assertEquals(3, events.count { it == GraphEvent.NodeStarted("flaky") })
         assertEquals(2, events.count { it == GraphEvent.NodeFailed("flaky", failure) })
         assertEquals(1, events.count { it == GraphEvent.WorkflowCompleted("workflow") })
@@ -166,5 +248,32 @@ class GraphReferenceTest {
         assertEquals(3, events.count { it == GraphEvent.NodeFailed("flaky", failure) })
         assertEquals(1, events.count { it == GraphEvent.WorkflowFailed("workflow", failure) })
         assertEquals(0, events.count { it is GraphEvent.WorkflowCompleted })
+    }
+
+    @Test
+    fun `never retry policy attempts a failing node exactly once`() {
+        var attempts = 0
+        val failure = IllegalStateException("boom")
+        val events = mutableListOf<GraphEvent>()
+        val validation =
+            Graph.create(reducer)
+                .addNode(
+                    Node("never") {
+                        attempts += 1
+                        throw failure
+                    },
+                )
+                .setStart("never")
+                .setEnd("never")
+                .validate()
+
+        val runner = assertIs<ValidationResult.Valid<State, Append>>(validation).runner
+        val result = assertIs<RunResult.Failure>(runner.run(State(emptyList()), events::add))
+
+        assertEquals(ExecutionError.RuntimeError("never", failure), result.error)
+        assertEquals(1, attempts)
+        assertEquals(1, events.count { it == GraphEvent.NodeStarted("never") })
+        assertEquals(1, events.count { it == GraphEvent.NodeFailed("never", failure) })
+        assertEquals(1, events.count { it == GraphEvent.WorkflowFailed("workflow", failure) })
     }
 }
