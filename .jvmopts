@@ -1,6 +1,0 @@
--Xms2g
--Xmx8g
--Xss4m
--XX:ReservedCodeCacheSize=512m
--XX:+UseG1GC
--XX:MaxGCPauseMillis=50
