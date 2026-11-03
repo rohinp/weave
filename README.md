@@ -1,106 +1,60 @@
 # Weave
 
-Weave is a Kotlin/JVM graph and workflow runtime built around explicit,
-deterministic execution semantics. The repository now contains a single Kotlin
-implementation; the former Scala/sbt implementation has been retired.
+Weave is a Scala 3/JVM workflow runtime built around explicit, deterministic
+execution semantics. The current implementation focuses on a synchronous graph
+scheduler while the broader runtime architecture is developed incrementally
+with tests.
 
-The current milestone focuses on trustworthy synchronous workflow behavior
-before introducing asynchronous or distributed execution.
+The longer-term direction is an event-sourced workflow and agent runtime powered
+by Apache Pekko. Graph execution will be one workflow model supported by that
+runtime, rather than the boundary of the entire library.
 
 ## What is implemented
 
 - immutable graph definitions with explicit validation
-- sealed validation and execution results
-- conditional routing over the reduced node state
+- conditional routing over reduced node state
 - FIFO ready-queue scheduling
 - branch-local state
 - strict joins based on parent identity
-- deterministic join-state merge order
-- typed join deadlock and unreachable-end failures
-- lifecycle callbacks and fixed-attempt retries
-- typed conversion of workflow-computation exceptions
+- deterministic join-state merge ordering
+- typed join-deadlock and runtime failures
+- lifecycle callbacks, checkpoints, and fixed-attempt retries
 
-Conditional convergence, asynchronous execution, persistence, supervision, and
-distributed execution are intentionally outside the current scope.
+Event persistence, replay, asynchronous execution, supervision, and distributed
+execution are not implemented yet.
 
 ## Requirements
 
-- JDK 25 (the project emits JVM 21 bytecode)
-- no system Gradle installation is required
+- JDK 25
+- sbt (the project pins its sbt version in `project/build.properties`)
 
 The repository's `.sdkmanrc` selects the expected JDK for SDKMAN users.
 
 ## Build and test
 
-```shell
-./gradlew check
-```
-
-Run only the test suite with:
+Run the Scala test suite with:
 
 ```shell
-./gradlew test
+sbt test
 ```
 
-## Minimal example
+Check formatting with:
 
-```kotlin
-import com.weave.core.Edge
-import com.weave.core.Graph
-import com.weave.core.Node
-import com.weave.core.Reducer
-import com.weave.core.RunResult
-import com.weave.core.ValidationResult
-
-val reducer = object : Reducer<Int, Int> {
-    override fun reduce(state: Int, update: Int): Int = state + update
-    override fun merge(left: Int, right: Int): Int = left + right
-}
-
-val graph = Graph.create(reducer)
-    .addNode(Node("start") { 1 })
-    .addNode(Node("end") { 2 })
-    .addEdge(Edge("start", "end"))
-    .setStart("start")
-    .setEnd("end")
-
-val runner = when (val validation = graph.validate()) {
-    is ValidationResult.Valid -> validation.runner
-    is ValidationResult.Invalid -> error(validation.error.message)
-}
-
-when (val result = runner.run(initialState = 0)) {
-    is RunResult.Success -> println(result.state) // 3
-    is RunResult.Failure -> error(result.error.message)
-}
+```shell
+sbt scalafmtCheckAll
 ```
-
-## API contracts
-
-- Invalid graphs never expose a runner.
-- Expected workflow failures are returned as `RunResult.Failure`; they are not
-  thrown.
-- `RetryPolicy.FixedAttempts(maxAttempts)` includes the initial attempt and
-  stops after the first success.
-- Node actions, reduction, routing predicates, and branch-state merging are
-  workflow computation. Their exceptions become typed execution failures and
-  emit `WorkflowFailed`.
-- Event callbacks are observers. Callback exceptions escape unchanged and are
-  neither retried nor converted into workflow failures.
-- `Graph.toString()` is diagnostic output and has no stable formatting contract.
 
 ## Project layout
 
 ```text
-src/main/kotlin/com/weave/core/   Public model and runtime
-src/test/kotlin/com/weave/core/   Behavioral and API contract tests
-build.gradle.kts                  Kotlin/JVM build
-Status.md                         Compact project handoff
+src/main/scala/com/weave/core/   Graph model and synchronous runtime
+src/test/scala/com/weave/core/   Behavioral runtime tests
+build.sbt                        Scala/sbt build
+Status.md                        Architecture and project handoff notes
 ```
 
-## Direction
+## Development approach
 
-The next work should preserve the current semantics and finish migration
-quality gates—such as CI and publication decisions—before adding execution
-features. Any future concurrency model should sit behind the established
-workflow contracts rather than redefine them accidentally.
+Development is test-driven. The current scheduler semantics should be protected
+one scenario at a time before introducing durable event sourcing and Pekko-backed
+execution.

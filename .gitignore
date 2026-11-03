@@ -12,6 +12,3 @@ project/target/
 .metals
 .bloop
 .bsp
-
-**/.gradle/
-**/build/
